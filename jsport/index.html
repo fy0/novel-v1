@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+  <meta charset="UTF-8">
+  <title>NS 测试页</title>
+  <script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.8.2/dist/alpine.min.js"></script>
+  <meta charset="utf-8" name="viewport"
+    content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+</head>
+
+<body>
+  <script src="./x.js"></script>
+<!--  <script src="https://unpkg.zhimg.com/eruda@2.4.1"></script>-->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!--  <script>eruda.init();</script>-->
+
+  <script>
+    var defaultScript = ["\r",":开始\r","你是一名勇者。\r","经过艰难的抉择，刻苦的磨炼，以及不懈的努力。\r","你来到了这里。\r","只要打倒魔王，一切就结束了！\r","\r","会赢吗？\r","会赢的。\r","来战斗吧！\r","\r","注: 伤害公式 = 攻击/2 + d(攻击)\r","\r",":init\r","@{\r","    me = { 'hp': 30 + d30, 'spd': 5 + d5, 'atk': 5 + d5, 'name': '玩家' };\r","}!\r","\r",":遇怪循环[me.atk\u003e50][打boss]\r","时机成熟了，去打BOSS!\r","\r",":遇怪\r","@say('')\r","战！\r","@{\r","    e = { 'hp': d40, 'spd': d(me.atk)+d10, 'atk': d(me.atk)+d10, 'name': ['哥布林', '软泥怪', '骷髅兵'][d3-1] };\r","}!\r","@say(`遇到怪物 {e.name}`)\r","\r","\r",":打怪循环\r","@say(`\\n玩家属性 生命{me.hp} 速度{me.spd} 攻击 {me.atk}`)\r","@say(`怪物属性 生命{e.hp} 速度{e.spd} 攻击 {e.atk} \u003c{e.name}\u003e`)\r","@select(`战斗!`, '逃跑', '不玩了！')\r","\r",":[val == 1]\r","\r","@{\r","// a为先攻，b为后手\r","if me.spd \u003e= e.spd {\r","    a = me;\r","    b = e;\r","} else {\r","    a = e;\r","    b = me;\r","}\r","\r","_dmg1 = a.atk / 2 + d(a.atk); // 攻方攻击力\r","_dmg2 = b.atk / 2 + d(b.atk); // 守方攻击力\r","\r","save_bhp = b.hp;\r","save_ahp = a.hp;\r","\r","b.hp = b.hp - _dmg1;\r","if b.hp \u003e 0 {\r","    a.hp = a.hp - _dmg2;\r","}\r","\r","text = `先攻: {a.name} 造成伤害: {a.atk/2}+d{a.atk}={_dmg1}\r","{b.name} 生命值: {save_bhp} -\u003e {b.hp}`;\r","\r","isEnd = false;\r","\r","if b.hp \u003c= 0 {\r","    isEnd = true;\r","    text = text + `\\n{b.name} 挂了!`;\r","} else {\r","    text = text + `\\n后手: {b.name} 造成伤害: {b.atk/2}+d{b.atk}={_dmg2}\r","{a.name} 生命值: {save_ahp} -\u003e {a.hp}`;\r","\r","    if a.hp \u003c= 0 {\r","        text = text + `\\n{a.name} 挂了!`;\r","        isEnd = true;\r","        // 互换 a b\r","        c = a; a = b; b = c;\r","    }\r","}\r","\r","if isEnd {\r","    // 之后 a 代表胜者，b代表败者\r","    if a.name == '玩家' {\r","        hpPlus = d15;\r","        atkPlus = d(b.atk);\r","        text = text + `\\n\\n玩家胜利！hp 恢复 d15={hpPlus} \\n攻击力增加 d{b.atk} = {atkPlus}`;\r","        a.atk = a.atk + atkPlus;\r","        a.hp = a.hp + hpPlus;\r","    } else {\r","        text = text + `玩家阵亡!`;\r","    }\r","}\r","\r","}!\r","@say(text)\r","\r",":[val == 1 \u0026\u0026 me.hp \u003c 0][end]\r","啊，我死了\r","\r",":[val == 1 \u0026\u0026 e.hp \u003e 0][打怪循环]\r",":[val == 1 \u0026\u0026 e.hp \u003c= 0][遇怪循环]\r","\r",":[val == 2][遇怪]\r","先跑路了，换一只怪！\r","\r",":[val == 3][回去了]\r","\r","\r",":打boss\r","这是boss，但是意外的非常弱。\r","你看了他一眼，把boss瞪死了。\r","\r","\r",":结束[][end]\r","这是结束\r","\r",":回去了\r","你感到无聊，走了。\r","\r",":end\r","完\r",""];
+  </script>
+
+  <div id="app" class="text-xl m-8 relative">
+    <!-- 很怪的设定，但是，临时用用，先接受这个设定  -->
+  </div>
+
+  <div class="absolute mr-8 mt-4" style="right:0; top:0" x-data="{ code: defaultScript.join('\n'), open: false }">
+    <div x-show="open" >
+      <textarea x-model="code" rows="10" cols="40" class="border border-gray-500 p-4"></textarea>
+    </div>
+    <div class="space-x-2">
+      <button @click="open = !open" class="ml-4 float-right border-2 border-blue-500 bg-white text-blue-500 hover:bg-blue-500 hover:text-white py-2 px-4 rounded">脚本显隐</button>
+      <button @click="compileAndRun(code)" class="float-right border-2 border-blue-500 bg-white text-blue-500 hover:bg-blue-500 hover:text-white py-2 px-4 rounded">执行</button>
+    </div>
+    <div><a href="https://github.com/fy0/novel-v1" target="_blank" class="text-blue-400">github.com/fy0/novel-v1</a></div>
+  </div>
+
+  <script type="module">
+    var defaultScript = ["\r",":\r","你是一名勇者。\r","经过艰难的抉择，刻苦的磨炼，以及不懈的努力。\r","你来到了这里。\r","只要打倒魔王，一切就结束了！\r","\r","会赢吗？\r","会赢的。\r","来战斗吧！\r","\r","注: 伤害公式 = 攻击/2 + d(攻击)\r","\r",":init\r","@{\r","    me = { 'hp': 30 + d30, 'spd': 5 + d5, 'atk': 5 + d5, 'name': '玩家' };\r","}!\r","\r",":遇怪循环[me.atk\u003e50][打boss]\r","时机成熟了，去打BOSS!\r","\r",":遇怪\r","@say('')\r","战！\r","@{\r","    e = { 'hp': d40, 'spd': d(me.atk)+d10, 'atk': d(me.atk)+d10, 'name': ['哥布林', '软泥怪', '骷髅兵'][d3-1] };\r","}!\r","@say(`遇到怪物 {e.name}`)\r","\r","\r",":打怪循环\r","@say(`\\n玩家属性 生命{me.hp} 速度{me.spd} 攻击 {me.atk}`)\r","@say(`怪物属性 生命{e.hp} 速度{e.spd} 攻击 {e.atk} \u003c{e.name}\u003e`)\r","@select(`战斗!`, '逃跑', '不玩了！')\r","\r",":[val == 1]\r","\r","@{\r","// a为先攻，b为后手\r","if me.spd \u003e= e.spd {\r","    a = me;\r","    b = e;\r","} else {\r","    a = e;\r","    b = me;\r","}\r","\r","_dmg1 = a.atk / 2 + d(a.atk); // 攻方攻击力\r","_dmg2 = b.atk / 2 + d(b.atk); // 守方攻击力\r","\r","save_bhp = b.hp;\r","save_ahp = a.hp;\r","\r","b.hp = b.hp - _dmg1;\r","if b.hp \u003e 0 {\r","    a.hp = a.hp - _dmg2;\r","}\r","\r","text = `先攻: {a.name} 造成伤害: {a.atk/2}+d{a.atk}={_dmg1}\r","{b.name} 生命值: {save_bhp} -\u003e {b.hp}`;\r","\r","isEnd = false;\r","\r","if b.hp \u003c= 0 {\r","    isEnd = true;\r","    text = text + `\\n{b.name} 挂了!`;\r","} else {\r","    text = text + `\\n后手: {b.name} 造成伤害: {b.atk/2}+d{b.atk}={_dmg2}\r","{a.name} 生命值: {save_ahp} -\u003e {a.hp}`;\r","\r","    if a.hp \u003c= 0 {\r","        text = text + `\\n{a.name} 挂了!`;\r","        isEnd = true;\r","        // 互换 a b\r","        c = a; a = b; b = c;\r","    }\r","}\r","\r","if isEnd {\r","    // 之后 a 代表胜者，b代表败者\r","    if a.name == '玩家' {\r","        hpPlus = d15;\r","        atkPlus = d(b.atk);\r","        text = text + `\\n\\n玩家胜利！hp 恢复 d15={hpPlus} \\n攻击力增加 d{b.atk} = {atkPlus}`;\r","        a.atk = a.atk + atkPlus;\r","        a.hp = a.hp + hpPlus;\r","    } else {\r","        text = text + `玩家阵亡!`;\r","    }\r","}\r","\r","}!\r","@say(text)\r","\r",":[val == 1 \u0026\u0026 me.hp \u003c 0][end]\r","啊，我死了\r","\r",":[val == 1 \u0026\u0026 e.hp \u003e 0][打怪循环]\r",":[val == 1 \u0026\u0026 e.hp \u003c= 0][遇怪循环]\r","\r",":[val == 2][遇怪]\r","先跑路了，换一只怪！\r","\r",":[val == 3][回去了]\r","\r","\r",":打boss\r","这是boss，但是意外的非常弱。\r","你看了他一眼，把boss瞪死了。\r","\r","\r",":结束[][end]\r","这是结束\r","\r",":回去了\r","你感到无聊，走了。\r","\r",":end\r","完\r",""];
+
+    const scrollToEnd = () => {
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+
+    class Seq {
+      constructor() {
+        this.restCmd = [];
+        this.root = document.getElementById('app')
+      }
+
+      halt() {
+        this.restCmd = [];
+      }
+
+      clear() {
+        this.root.replaceChildren();
+      }
+
+      tick() {
+        if (this.restCmd.length) {
+          let v = this.restCmd.shift();
+          switch (v.type) {
+            case "print": {
+              const t = document.createElement(v.data === '\n' ? 'br' : 'span');
+              t.textContent = v.data;
+              this.root.appendChild(t)
+              this._next(v.wait || 50);
+              scrollToEnd();
+              return;
+            }
+            case 'select': {
+              const base = document.createElement('div');
+              base.className = "mt-4 mb-4 space-y-2"
+
+              let index = 0;
+              let disableAll = false;
+              for (let i of v.data) {
+                const item = document.createElement("div")
+                item.className = "cursor-pointer text-center border-2 border-gray-500 hover:border-gray-700 text-gray-500 py-2 px-4 rounded w-fit"
+                item.innerText = i;
+                item.style = "min-width: 12rem"
+                let x = index + 1;
+                item.onclick = function () {
+                  if (!disableAll) {
+                    disableAll = true;
+                    v.resolve(x);
+                    item.className = "cursor-pointer text-center border-2 border-blue-500 hover:border-blue-700 text-blue-500 py-2 px-4 rounded w-fit"
+                  }
+                }
+                base.appendChild(item);
+                index += 1;
+              }
+              this.root.appendChild(base);
+              scrollToEnd();
+              this._next();
+            }
+          }
+        }
+
+        // 无命令时，进行等待
+        this._next();
+      }
+
+      _next(t = 50) {
+        setTimeout(() => {
+          this.tick();
+        }, t)
+      }
+
+      run() {
+        setTimeout(() => {
+          this.tick();
+        })
+      }
+
+      write(text, lineEnd, speed) {
+        for (let i of text) {
+          this.restCmd.push({ type:'print', data: i, wait: speed })
+        }
+        if (lineEnd) {
+          this.restCmd.push({ type:'print', data: '\n', wait: speed })
+        }
+      }
+    }
+
+    var seq = new Seq()
+
+    seq.run();
+    window.seq =seq;
+
+    // const a = ns.parseText(':xx\n3333\n4你选择了444555\n@select("1", "2", "测试一个长文本")\n336663')
+    const a = ns.parseText(defaultScript.join('\n'))
+
+    const newLoader = () => {
+      const b = ns.newLoader()
+
+      // ns.invokeOverride(b, (name, params) => {
+      //   switch (name) {
+      //
+      //   }
+      //   console.log(name, params);
+      //   return [true, false];
+      // })
+      b.PrintOverride = (s, lineEnd, speed) => {
+        console.log('print', s, lineEnd, speed)
+        seq.write(s, lineEnd, speed)
+      }
+      b.SelectOverride = (choices, resolve) => {
+        console.log('select', choices)
+        seq.restCmd.push({
+          type: 'select',
+          data: choices,
+          resolve,
+        })
+        return 0
+      }
+
+      return b;
+    }
+
+    const b = newLoader();
+    b.EvalAsync(a)
+
+    window.compileAndRun = (code) => {
+      seq.halt()
+      // 搞点土法，回避正在工作的计时器
+      setTimeout(() => {
+        seq.clear();
+        const a = ns.parseText(code);
+        const b = newLoader()
+        b.EvalAsync(a);
+      }, 500);
+    }
+  </script>
+</body>
+
+</html>

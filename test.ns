@@ -1,0 +1,127 @@
+
+:开始
+你是一名勇者。
+经过艰难的抉择，刻苦的磨炼，以及不懈的努力。
+你来到了这里。
+只要打倒魔王，一切就结束了！
+
+会赢吗？
+会赢的。
+来战斗吧！
+
+注: 伤害公式 = 攻击/2 + d(攻击)
+
+:init
+@{
+    me = { 'hp': 30 + d30, 'spd': 5 + d5, 'atk': 5 + d5, 'name': '玩家' };
+}!
+
+:遇怪循环[me.atk>50][打boss]
+时机成熟了，去打BOSS!
+
+:遇怪
+@say('')
+战！
+@{
+    e = { 'hp': d40, 'spd': d(me.atk)+d10, 'atk': d(me.atk)+d10, 'name': ['哥布林', '软泥怪', '骷髅兵'][d3-1] };
+}!
+@say(`遇到怪物 {e.name}`)
+
+
+:打怪循环
+@say(`\n玩家属性 生命{me.hp} 速度{me.spd} 攻击 {me.atk}`)
+@say(`怪物属性 生命{e.hp} 速度{e.spd} 攻击 {e.atk} <{e.name}>`)
+@select(`战斗!`, '逃跑', '不玩了！')
+
+:[val == 1]
+
+@{
+// a为先攻，b为后手
+if me.spd >= e.spd {
+    a = me;
+    b = e;
+} else {
+    a = e;
+    b = me;
+}
+
+_dmg1 = a.atk / 2 + d(a.atk); // 攻方攻击力
+_dmg2 = b.atk / 2 + d(b.atk); // 守方攻击力
+
+save_bhp = b.hp;
+save_ahp = a.hp;
+
+b.hp = b.hp - _dmg1;
+if b.hp > 0 {
+    a.hp = a.hp - _dmg2;
+}
+
+text = `先攻: {a.name} 造成伤害: {a.atk/2}+d{a.atk}={_dmg1}
+{b.name} 生命值: {save_bhp} -> {b.hp}`;
+
+isEnd = false;
+
+if b.hp <= 0 {
+    isEnd = true;
+    text = text + `\n{b.name} 挂了!`;
+} else {
+    text = text + `\n后手: {b.name} 造成伤害: {b.atk/2}+d{b.atk}={_dmg2}
+{a.name} 生命值: {save_ahp} -> {a.hp}`;
+
+    if a.hp <= 0 {
+        text = text + `\n{a.name} 挂了!`;
+        isEnd = true;
+        // 互换 a b
+        c = a; a = b; b = c;
+    }
+}
+
+if isEnd {
+    // 之后 a 代表胜者，b代表败者
+    if a.name == '玩家' {
+        hpPlus = d15;
+        atkPlus = d(b.atk);
+        text = text + `\n\n玩家胜利！hp 恢复 d15={hpPlus} \n攻击力增加 d{b.atk} = {atkPlus}`;
+        a.atk = a.atk + atkPlus;
+        a.hp = a.hp + hpPlus;
+    } else {
+        text = text + `玩家阵亡!`;
+    }
+}
+
+}!
+@say(text)
+
+:[val == 1 && me.hp < 0][end]
+啊，我死了
+
+:[val == 1 && e.hp > 0][打怪循环]
+:[val == 1 && e.hp <= 0][遇怪循环]
+
+:[val == 2][遇怪]
+先跑路了，换一只怪！
+
+:[val == 3][回去了]
+
+
+:打boss
+这是boss，但是意外的非常弱。
+你看了他一眼，把boss瞪死了。
+
+
+:结束[][end]
+这是结束
+
+:回去了
+你感到无聊，走了。
+
+:end
+完
+
+@{
+// 其实我不太觉得这是一个好例子
+// 应该说是比较差的例子了
+// 因为里面塞了一个简易战斗，这其实不应该是剧情脚本引擎应该解决的问题
+// 战斗的处理应该在外面的战斗系统来进行，剧情展示中即使有，也只做简单的调用
+// 后面再搞别的例子吧
+}!

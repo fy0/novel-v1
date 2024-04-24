@@ -1,0 +1,200 @@
+{
+package novelscript
+
+type Story struct {
+    Name string `json:"name"`
+    Items []*StoryNode `json:"items"`
+}
+
+type StoryNode struct {
+    Pos []int `json:"pos"` // line, col, pos
+    Name string `json:"name"`
+    Lines []*StoryNodeLine `json:"lines"`
+    Condition string `json:"cond,omitempty"`
+    Next string `json:"next,omitempty"`
+}
+
+type StoryNodeLine struct {
+    Pos []int `json:"pos"` // line, col, pos
+
+    Type string `json:"type,omitempty"`
+
+    // type: invoke 注: 这种情况下type置空，节省空间
+    Name string `json:"name,omitempty"`
+    Params []string `json:"params,omitempty"`
+
+    // type: code
+    Code string `json:"code,omitempty"`
+}
+
+func gatherParams(first any, v any) []string {
+	if v == nil {
+		return nil
+	}
+
+	items := []string{first.(string)}
+	if x, ok := v.([]any); ok {
+		for _, i := range x {
+			items = append(items, i.(string))
+		}
+	}
+	return items
+}
+
+}
+
+
+input <- sp x:nodes !. {
+    return x, nil
+}
+
+nodes <- nodes:(node*) {
+    var items []*StoryNode
+	if x, ok := nodes.([]any); ok {
+		for _, i := range x {
+		    items = append(items, i.(*StoryNode))
+		}
+	}
+    return &Story{Items: items}, nil
+}
+
+_nodeCondContent <- [^\]]+ { return string(c.text), nil }
+_nodeCond <- '[' cond:_nodeCondContent? ']' { return cond, nil }
+_nodeNext <- '[' name:identifier ']' { return name, nil }
+
+node <- nodeType1 / nodeType2
+
+nodeType1 <- ':' name:identifier? (cond:_nodeCond next:_nodeNext?) spNoCR cr lines:nodeLines {
+    nameStr, _ := name.(string)
+    condStr, _ := cond.(string)
+    nextStr, _ := next.(string)
+
+    var items []*StoryNodeLine
+	if x, ok := lines.([]any); ok {
+		for _, i := range x {
+		    if i != nil {
+    		    items = append(items, i.(*StoryNodeLine))
+		    }
+		}
+	}
+
+    return &StoryNode{
+        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
+        Name: nameStr,
+        Lines: items,
+        Condition: condStr,
+        Next: nextStr,
+    }, nil
+}
+
+nodeType2 <- ':' name:identifier? spNoCR cr lines:nodeLines {
+    nameStr, _ := name.(string)
+
+    var items []*StoryNodeLine
+	if x, ok := lines.([]any); ok {
+		for _, i := range x {
+		    if i != nil {
+    		    items = append(items, i.(*StoryNodeLine))
+            }
+		}
+	}
+
+    return &StoryNode{
+        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
+        Name: nameStr,
+        Lines: items,
+    }, nil
+}
+
+nodeLines <- lines:nodeLine* sp { return lines, nil }
+
+nodeLine <- nodeLineTypeComment / nodeLineType1 / nodeLineType2 / nodeLineType3
+
+nodeLineTypeComment <- '@' '#' (!cr .)+ cr sp { return nil, nil }
+
+nodeLineType1 <- '@' name:identifier params:funcInvoke sp {
+    nameStr, _ := name.(string)
+
+    return &StoryNodeLine{
+        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
+        Name: nameStr,
+        Params: params.([]string),
+    }, nil
+}
+
+nodeLineType2 <- "@{" code:_storyNodeCodeBlock "}!" sp {
+    return &StoryNodeLine{
+        Type: "code",
+        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
+        Code: code.(string),
+    }, nil
+}
+
+nodeLineType3Text <- ( ![:@] [^\r\n]* cr )+ { return string(c.text), nil }
+nodeLineType3 <- text:nodeLineType3Text {
+    if strings.TrimSpace(text.(string)) == "" {
+        return nil, nil
+    }
+    return &StoryNodeLine{
+        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
+        Name: "sayRaw",
+        Params: []string{text.(string)},
+    }, nil
+}
+
+_storyNodeCodeBlock <- ( ( !"}!" . )* ) { return strings.TrimSpace(string(c.text)), nil }
+
+
+funcInvoke <- '(' sp ')' { return []string{}, nil }
+            / '(' sp first:codeExpr rest:(funcInvokeParamExtend*) ')' { return gatherParams(first, rest), nil }
+
+funcInvokeParamExtend <- sp ',' sp e:codeExpr { return e, nil }
+
+// codeExpr <- [^\n,)]+ { return string(c.text), nil }
+codeExpr <- codeExpr2 { return string(c.text), nil }
+
+codeExpr2 <- identifier
+           / integer
+           / [0-9]* '.' [0-9]+
+           / stringType
+
+stringType <- (codeString / '`' [^`]* '`') { return string(c.text), nil }
+
+codeString ← '"' ( !EscapedChar . / '\\' EscapeSequence )* '"'
+           / '\'' ( !EscapedChar2 . / '\\' EscapeSequence2 )* '\''
+
+EscapedChar2 ← [\x00-\x1f'\\]
+EscapeSequence2 ← SingleCharEscape2 / UnicodeEscape
+SingleCharEscape2 ← ['\\/bfnrt]
+
+String ← '"' ( !EscapedChar . / '\\' EscapeSequence )* '"' {
+    c.text = bytes.Replace(c.text, []byte(`\/`), []byte(`/`), -1)
+    return strconv.Unquote(string(c.text))
+}
+EscapedChar ← [\x00-\x1f"\\]
+EscapeSequence ← SingleCharEscape / UnicodeEscape
+SingleCharEscape ← ["\\/bfnrt]
+UnicodeEscape ← 'u' HexDigit HexDigit HexDigit HexDigit
+DecimalDigit ← [0-9]
+NonZeroDecimalDigit ← [1-9]
+HexDigit ← [0-9a-f]i
+
+integer <- '-'? [0-9]+ {
+    return strconv.Atoi(string(c.text))
+}
+
+identifier <- xidStart xidContinue* {
+    return string(c.text), nil
+}
+
+// L + Other_ID_Start
+xidStart <- [_\p{L}\p{Other_ID_Start}]
+
+// xid_start + Nl + Mn + Mc + Nd + Pc + Other_ID_Continue \u200C\u200D
+xidContinue <- [\p{L}\p{Other_ID_Start}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}\p{Other_ID_Continue}]
+
+sp "whitespace" <- [ \n\t\r]*
+
+spNoCR <- [ \t]*
+
+cr <- [\r\n]
