@@ -3,9 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	ns "novel-v1"
 	"os"
 	"strings"
+
+	ns "novel-v1"
 )
 
 func main() {
@@ -20,11 +21,7 @@ func main() {
 	x, _ := json.Marshal(strings.Split(string(d), "\n"))
 	os.WriteFile("./out.json", x, 0644)
 
-	sl := ns.StoryLoader{}
-	sl.SetupDefault()
+	sl := &ns.StoryLoader{}
+	SetupDiceScript(sl)
 	sl.Eval(v)
-
-	// json 解决不了问题，因为不能流式传输
-	//x, _ := json.Marshal(v)
-	//fmt.Println(err, string(x))
 }

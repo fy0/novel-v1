@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+  <meta charset="UTF-8">
+  <title>NS 测试页 v2</title>
+  <script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.8.2/dist/alpine.min.js"></script>
+  <meta charset="utf-8" name="viewport"
+    content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+</head>
+
+<body>
+  <!--  <script src="https://unpkg.zhimg.com/eruda@2.4.1"></script>-->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!--  <script>eruda.init();</script>-->
+
+  <script>
+    var defaultScript = ["",":开始","你是一名勇者。","经过艰难的抉择，刻苦的磨炼，以及不懈的努力。","你来到了这里。","只要打倒魔王，一切就结束了！","","会赢吗？","会赢的。","来战斗吧！","","注: 伤害公式 = 攻击/2 + d(攻击)","",":init","@{","    var me, e, val, a, b, c;","    var d = (n) =\u003e parseInt(Math.random() * n + 1);","    me = { 'hp': 30 + d(30), 'spd': 5 + d(5), 'atk': 5 + d(5), 'name': '玩家' };","}!","",":遇怪循环[me.atk\u003e50][打boss]","时机成熟了，去打BOSS!","",":遇怪","@say('')","战！","@{","    e = { 'hp': d(40), 'spd': d(me.spd)+d(10), 'atk': d(me.atk)+d(10), 'name': ['哥布林', '软泥怪', '骷髅兵'][d(3)-1] };","}!","@say(`遇到怪物 ${e.name}`)","","",":打怪循环","@say(`\\n玩家属性 生命${me.hp} 速度${me.spd} 攻击 ${me.atk}`)","@say(`怪物属性 生命${e.hp} 速度${e.spd} 攻击 ${e.atk} \u003c${e.name}\u003e`)","@select(`战斗!`, '逃跑', '不玩了！')","",":[val == 1]","","@{","// a为先攻，b为后手","if (me.spd \u003e= e.spd) {","    a = me;","    b = e;","} else {","    a = e;","    b = me;","}","","let _dmg1 = a.atk / 2 + d(a.atk); // 攻方攻击力","let _dmg2 = b.atk / 2 + d(b.atk); // 守方攻击力","","let save_bhp = b.hp;","let save_ahp = a.hp;","","b.hp = b.hp - _dmg1;","if (b.hp \u003e 0) {","    a.hp = a.hp - _dmg2;","}","","var text = `先攻: ${a.name} 造成伤害: ${a.atk/2}+d${a.atk}=${_dmg1}","${b.name} 生命值: ${save_bhp} -\u003e ${b.hp}`;","","var isEnd = false;","","if (b.hp \u003c= 0) {","    isEnd = true;","    text = text + `\\n${b.name} 挂了!`;","} else {","    text = text + `\\n后手: ${b.name} 造成伤害: ${b.atk/2}+d${b.atk}=${_dmg2}","${a.name} 生命值: ${save_ahp} -\u003e ${a.hp}`;","","    if (a.hp \u003c= 0) {","        text = text + `\\n${a.name} 挂了!`;","        isEnd = true;","        // 互换 a b","        c = a; a = b; b = c;","    }","}","","if (isEnd) {","    // 之后 a 代表胜者，b代表败者","    if (a.name == '玩家') {","        let hpPlus = d(15);","        let atkPlus = d(b.atk);","        text = text + `\\n\\n玩家胜利！hp 恢复 d15=${hpPlus} \\n攻击力增加 d${b.atk} = ${atkPlus}`;","        a.atk = a.atk + atkPlus;","        a.hp = a.hp + hpPlus;","    } else {","        text = text + `玩家阵亡!`;","    }","}","","}!","@say(text)","",":[val == 1 \u0026\u0026 me.hp \u003c 0][end]","啊，我死了","",":[val == 1 \u0026\u0026 e.hp \u003e 0][打怪循环]",":[val == 1 \u0026\u0026 e.hp \u003c= 0][遇怪循环]","",":[val == 2][遇怪循环]","先跑路了，换一只怪！","",":[val == 3][回去了]","","",":打boss","这是boss，但是意外的非常弱。","你看了他一眼，把boss瞪死了。","","",":结束[][end]","这是结束","",":回去了","你感到无聊，走了。","",":end","完","","@{","// 其实我不太觉得这是一个好例子","// 应该说是比较差的例子了","// 因为里面塞了一个简易战斗，这其实不应该是剧情脚本引擎应该解决的问题","// 战斗的处理应该在外面的战斗系统来进行，剧情展示中即使有，也只做简单的调用","// 后面再搞别的例子吧","}!",""];
+  </script>
+
+  <div id="app" class="text-xl m-8 relative">
+    <!-- 很怪的设定，但是，临时用用，先接受这个设定  -->
+  </div>
+
+  <div class="absolute mr-8 mt-4" style="right:0; top:0" x-data="{ code: defaultScript.join('\n'), open: false }">
+    <div x-show="open">
+      <textarea x-model="code" rows="10" cols="40" class="border border-gray-500 p-4"></textarea>
+    </div>
+    <div class="space-x-2">
+      <button @click="open = !open"
+        class="ml-4 float-right border-2 border-blue-500 bg-white text-blue-500 hover:bg-blue-500 hover:text-white py-2 px-4 rounded">脚本显隐</button>
+      <button @click="compileAndRun(code)"
+        class="float-right border-2 border-blue-500 bg-white text-blue-500 hover:bg-blue-500 hover:text-white py-2 px-4 rounded">执行</button>
+    </div>
+    <div><a href="https://github.com/fy0/novel-v1" target="_blank" class="text-blue-400">github.com/fy0/novel-v1</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import ns from './ns.js';
+
+    const scrollToEnd = () => {
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+
+    class Seq {
+      constructor() {
+        this.restCmd = [];
+        this.root = document.getElementById('app')
+      }
+
+      halt() {
+        this.restCmd = [];
+      }
+
+      clear() {
+        this.root.replaceChildren();
+      }
+
+      tick() {
+        if (this.restCmd.length) {
+          let v = this.restCmd.shift();
+          switch (v.type) {
+            case "print": {
+              const t = document.createElement(v.data === '\n' ? 'br' : 'span');
+              t.textContent = v.data;
+              this.root.appendChild(t)
+              this._next(v.wait || 50);
+              scrollToEnd();
+              return;
+            }
+            case 'select': {
+              const base = document.createElement('div');
+              base.className = "mt-4 mb-4 space-y-2"
+
+              let index = 0;
+              let disableAll = false;
+              for (let i of v.data) {
+                const item = document.createElement("div")
+                item.className = "cursor-pointer text-center border-2 border-gray-500 hover:border-gray-700 text-gray-500 py-2 px-4 rounded w-fit"
+                item.innerText = i;
+                item.style = "min-width: 12rem"
+                let x = index + 1;
+                item.onclick = function () {
+                  if (!disableAll) {
+                    disableAll = true;
+                    v.resolve(x);
+                    item.className = "cursor-pointer text-center border-2 border-blue-500 hover:border-blue-700 text-blue-500 py-2 px-4 rounded w-fit"
+                  }
+                }
+                base.appendChild(item);
+                index += 1;
+              }
+              this.root.appendChild(base);
+              scrollToEnd();
+              this._next();
+            }
+          }
+        }
+
+        // 无命令时，进行等待
+        this._next();
+      }
+
+      _next(t = 50) {
+        setTimeout(() => {
+          this.tick();
+        }, t)
+      }
+
+      run() {
+        setTimeout(() => {
+          this.tick();
+        })
+      }
+
+      write(text, lineEnd, speed) {
+        for (let i of text) {
+          this.restCmd.push({ type: 'print', data: i, wait: speed })
+        }
+        if (lineEnd) {
+          this.restCmd.push({ type: 'print', data: '\n', wait: speed })
+        }
+      }
+    }
+
+    var seq = new Seq()
+
+    seq.run();
+    window.seq = seq;
+
+    const doPrint = (s, lineEnd, speed) => {
+      console.log('print', s, lineEnd, speed)
+      seq.write(s, lineEnd, speed)
+    }
+
+    const doSelect = (choices) => {
+      return new Promise(resolve => {
+        console.log('select', choices)
+        seq.restCmd.push({
+          type: 'select',
+          data: choices,
+          resolve,
+        })
+      })
+    }
+
+    const newLoader = () => {
+      const sl = new ns.StoryLoader();
+
+      globalThis.val = 0;
+      let myEval = eval;
+
+      sl.invokeCallback = async (sl, name, params) => {
+        switch (name) {
+          case "sayRaw":
+            await doPrint(params[0].trim(), true, 0);
+            return true;
+          case "say":
+            await doPrint(myEval(params[0]), true, 0);
+            return true;
+          case "select": {
+            let choices = [];
+            for (let i of params) {
+              choices.push(myEval(i));
+            }
+            let choice = await doSelect(choices);
+            await doPrint(`你选择了: ${choice}`, true, 30);
+            val = choice;
+            return true;
+          }
+        }
+
+        myEval(`${name}(${params.join(', ')})`);
+        return true;
+      }
+
+      sl.codeCallback = async (sl, code) => {
+        console.log('???', code);
+        try {
+          const r = myEval(code);
+          console.log('???', r);
+          return r;
+        } catch (error) {
+          console.log('error:', code);
+          throw error;
+        }
+      }
+
+      return sl;
+    }
+
+    const sl = newLoader();
+    const s = sl.parse(defaultScript.join('\n'));
+    console.log(s);
+    sl.eval(s);
+
+    window.compileAndRun = (code) => {
+      seq.halt();
+      // 搞点土法，回避正在工作的计时器
+      setTimeout(() => {
+        seq.clear();
+        const sl = newLoader()
+        const s = sl.parse(code);
+        console.log(s);
+        sl.eval(s);
+      }, 500);
+    }
+  </script>
+</body>
+
+</html>

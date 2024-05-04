@@ -1,0 +1,10 @@
+--main Main
+-D js-es=6
+--dce=full
+--js=js/ns.mjs
+# --interp
+
+# var exports = {};
+
+# })(exports);
+# export default exports;

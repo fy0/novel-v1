@@ -1,4 +1,4 @@
-package novelscript
+package main
 
 import (
 	"errors"
@@ -8,16 +8,15 @@ import (
 	"time"
 
 	ds "github.com/sealdice/dicescript"
+	ns "novel-v1"
 )
 
-func (sl *StoryLoader) SetupDefault() {
+func SetupDiceScript(sl *ns.StoryLoader) {
 	vm := ds.NewVM()
 
 	scope := map[string]*ds.VMValue{}
 	player := ds.VMValueNewDict(nil)
 	player.Store("力量", ds.VMValueNewInt(50))
-	player.Store("敏捷", ds.VMValueNewInt(60))
-	player.Store("智力", ds.VMValueNewInt(70))
 	scope["player"] = player.V()
 
 	scope["trace"] = ds.VMValueNewNativeFunction(&ds.NativeFunctionData{
@@ -36,7 +35,7 @@ func (sl *StoryLoader) SetupDefault() {
 		return nil
 	}
 
-	defaultInvokeCallback := func(sl *StoryLoader, name string, params []string) (bool, error) {
+	defaultInvokeCallback := func(sl *ns.StoryLoader, name string, params []string) (bool, error) {
 		doPrintTerminal := func(s string, lineEnd bool, speedMicroSecond int) {
 			if speedMicroSecond == 0 {
 				speedMicroSecond = 70
@@ -148,7 +147,7 @@ func (sl *StoryLoader) SetupDefault() {
 
 	sl.InvokeCallback = defaultInvokeCallback
 
-	sl.ConditionCallback = func(sl *StoryLoader, expr string) (bool, error) {
+	sl.ConditionCallback = func(sl *ns.StoryLoader, expr string) (bool, error) {
 		err := vm.Run(expr)
 		if err != nil {
 			sl.Error = err
@@ -157,7 +156,7 @@ func (sl *StoryLoader) SetupDefault() {
 		return vm.Ret.AsBool(), nil
 	}
 
-	sl.CodeCallback = func(sl *StoryLoader, expr string) (any, error) {
+	sl.CodeCallback = func(sl *ns.StoryLoader, expr string) (any, error) {
 		err := vm.Run(expr)
 		if err != nil {
 			sl.Error = err

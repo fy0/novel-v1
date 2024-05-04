@@ -1,30 +1,46 @@
 {
+{{ if eq .target "go" }}
 package novelscript
 
-type Story struct {
-    Name string `json:"name"`
-    Items []*StoryNode `json:"items"`
+import "strings"
+
+type ParserCustomData struct {
+	CurIndex   int
+	Name2Index map[string]int
 }
 
-type StoryNode struct {
-    Pos []int `json:"pos"` // line, col, pos
-    Name string `json:"name"`
-    Lines []*StoryNodeLine `json:"lines"`
-    Condition string `json:"cond,omitempty"`
-    Next string `json:"next,omitempty"`
+func (d *ParserCustomData) getNextIndex() int {
+    // 如果我是第0段，那next是1
+    d.CurIndex += 1
+    return d.CurIndex
 }
 
-type StoryNodeLine struct {
-    Pos []int `json:"pos"` // line, col, pos
+func (d *ParserCustomData) setSectionIndex(name string) error {
+    if name == "" {
+        return nil
+    }
+    if d.Name2Index == nil {
+        d.Name2Index = map[string]int{}
+    }
 
-    Type string `json:"type,omitempty"`
+    if _, exists := d.Name2Index[name]; exists {
+        return errors.New("section name must be unique")
+    }
 
-    // type: invoke 注: 这种情况下type置空，节省空间
-    Name string `json:"name,omitempty"`
-    Params []string `json:"params,omitempty"`
+    d.Name2Index[name] = d.CurIndex
+    return nil
+}
 
-    // type: code
-    Code string `json:"code,omitempty"`
+func parseFilterNil[T any](lines any, t T) []*T {
+	var items []*T
+	if x, ok := lines.([]any); ok {
+		for _, i := range x {
+			if i != nil {
+				items = append(items, i.(*T))
+			}
+		}
+	}
+	return items
 }
 
 func gatherParams(first any, v any) []string {
@@ -41,124 +57,242 @@ func gatherParams(first any, v any) []string {
 	return items
 }
 
+func retWrap(a any, err error) (any, error) {
+	return a, err
 }
 
+func toStr(x []byte) string {
+	return string(x)
+}
+
+func toStrWithTrim(x []byte) string {
+	return strings.TrimSpace(string(x))
+}
+
+{{ else }}
+class ParserCustomData {
+    public var curIndex = 0;
+    public var name2Index = new Map<String, Int>();
+	public function new() {}
+
+	public function getNextIndex():Int {
+        // 如果我是第0段，那next是1
+        this.curIndex += 1;
+        return this.curIndex;
+	}
+
+	public function setSectionIndex(name:Null<String>):Exception {
+		if (name == "" || name == null) {
+			return null;
+		}
+		if (this.name2Index.exists(name)) {
+			return new Exception("section name must be unique");
+		}
+		this.name2Index[name] = this.curIndex;
+		return null;
+	}
+}
+
+function parseFilterNil(lines:Any):Array<Any> {
+	var items:Array<Any> = [];
+	if (Std.isOfType(lines, Array)) {
+		var x:Array<Any> = cast lines;
+		for (i in x) {
+			if (i != null) {
+				items.push(i);
+			}
+		}
+	}
+	return items;
+}
+
+function gatherParams(first:Any, v:Any):Array<String> {
+	if (v == null) {
+		return null;
+	}
+	var items:Array<String> = [first];
+	for (i in parseFilterNil(v)) {
+		items.push(i);
+	}
+	return items;
+}
+
+var retWrap = (a:Any, err:Exception) -> {val: a, err: err};
+var toStr = (x:String) -> x;
+var toStrWithTrim = (x:String) -> StringTools.trim(x);
+var nil = null;
+{{ end }}
+}
 
 input <- sp x:nodes !. {
-    return x, nil
+    return retWrap(x, nil);
 }
 
 nodes <- nodes:(node*) {
-    var items []*StoryNode
+{{ if eq .target "go" }}
+    var items []*StorySection
 	if x, ok := nodes.([]any); ok {
 		for _, i := range x {
-		    items = append(items, i.(*StoryNode))
+		    items = append(items, i.(*StorySection))
 		}
 	}
-    return &Story{Items: items}, nil
+    return retWrap(&Story{Items: items}, nil);
+{{ else }}
+    return retWrap(new Types.Story(nodes), nil);
+{{ end }}
 }
 
-_nodeCondContent <- [^\]]+ { return string(c.text), nil }
-_nodeCond <- '[' cond:_nodeCondContent? ']' { return cond, nil }
-_nodeNext <- '[' name:identifier ']' { return name, nil }
+_nodeCondContent <- [^\]]+ { return retWrap(toStr(c.text), nil); }
+_nodeCond <- '[' cond:_nodeCondContent? ']' { return retWrap(cond, nil); }
+_nodeNext <- '[' name:identifier ']' { return retWrap(name, nil); }
 
 node <- nodeType1 / nodeType2
 
-nodeType1 <- ':' name:identifier? (cond:_nodeCond next:_nodeNext?) spNoCR cr lines:nodeLines {
+nodeType1 <- ':' spNoCR name:identifier? spNoCR (cond:_nodeCond spNoCR next:_nodeNext?) spNoCR cr lines:nodeLines {
+{{ if eq .target "go" }}
     nameStr, _ := name.(string)
     condStr, _ := cond.(string)
     nextStr, _ := next.(string)
+    items := parseFilterNil(lines, StorySectionLine{})
 
-    var items []*StoryNodeLine
-	if x, ok := lines.([]any); ok {
-		for _, i := range x {
-		    if i != nil {
-    		    items = append(items, i.(*StoryNodeLine))
-		    }
-		}
-	}
-
-    return &StoryNode{
+    if err := c.data.setSectionIndex(nameStr); err != nil {
+        return nil, err
+    }
+    return retWrap(&StorySection{
         Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
         Name: nameStr,
         Lines: items,
         Condition: condStr,
         Next: nextStr,
-    }, nil
+        NextIndex: c.data.getNextIndex(),
+    }, nil);
+{{ else }}
+    var e = c.data.setSectionIndex(name);
+    if (e != null) {
+        return retWrap(null, e);
+    }
+
+    return retWrap({
+        pos:[c.pos.line, c.pos.col, c.pos.offset],
+        name:name,
+        lines:parseFilterNil(lines),
+        condition:cond,
+        next:next,
+        nextIndex: c.data.getNextIndex(),
+    }, nil);
+{{ end }}
 }
 
 nodeType2 <- ':' name:identifier? spNoCR cr lines:nodeLines {
+{{ if eq .target "go" }}
     nameStr, _ := name.(string)
+    items := parseFilterNil(lines, StorySectionLine{})
 
-    var items []*StoryNodeLine
-	if x, ok := lines.([]any); ok {
-		for _, i := range x {
-		    if i != nil {
-    		    items = append(items, i.(*StoryNodeLine))
-            }
-		}
-	}
-
-    return &StoryNode{
+    if err := c.data.setSectionIndex(nameStr); err != nil {
+        return nil, err
+    }
+    return retWrap(&StorySection{
         Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
         Name: nameStr,
         Lines: items,
-    }, nil
+        NextIndex: c.data.getNextIndex(),
+    }, nil);
+{{ else }}
+    var e = c.data.setSectionIndex(name);
+    if (e != null) {
+        return retWrap(null, e);
+    }
+
+    return retWrap({
+        pos:[c.pos.line, c.pos.col, c.pos.offset],
+        name:name,
+        lines:parseFilterNil(lines),
+        nextIndex: c.data.getNextIndex(),
+    }, nil);
+{{ end }}
 }
 
-nodeLines <- lines:nodeLine* sp { return lines, nil }
+nodeLines <- lines:nodeLine* sp { return retWrap(lines, nil); }
 
 nodeLine <- nodeLineTypeComment / nodeLineType1 / nodeLineType2 / nodeLineType3
 
-nodeLineTypeComment <- '@' '#' (!cr .)+ cr sp { return nil, nil }
+nodeLineTypeComment <- '@' '#' (!cr .)+ cr sp { return retWrap(nil, nil); }
 
 nodeLineType1 <- '@' name:identifier params:funcInvoke sp {
+{{ if eq .target "go" }}
     nameStr, _ := name.(string)
 
-    return &StoryNodeLine{
+    return retWrap(&StorySectionLine{
         Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
         Name: nameStr,
         Params: params.([]string),
-    }, nil
+    }, nil);
+{{ else }}
+    return retWrap({
+        type: "",
+        pos:[c.pos.line, c.pos.col, c.pos.offset],
+        name:name,
+        params:params,
+    }, nil);
+{{ end }}
 }
 
-nodeLineType2 <- "@{" code:_storyNodeCodeBlock "}!" sp {
-    return &StoryNodeLine{
+nodeLineType2 <- "@{" code:_storyNodeCodeBlock "}!" spNoCR cr {
+{{ if eq .target "go" }}
+    return retWrap(&StorySectionLine{
         Type: "code",
         Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
         Code: code.(string),
-    }, nil
+    }, nil);
+{{ else }}
+    return retWrap({
+        pos:[c.pos.line, c.pos.col, c.pos.offset],
+        type:'code',
+        code:code,
+    }, nil);
+{{ end }}
 }
 
-nodeLineType3Text <- ( ![:@] [^\r\n]* cr )+ { return string(c.text), nil }
+nodeLineType3Text <- ( ![:@] [^\r\n]* cr )+ { return retWrap(toStr(c.text), nil); }
 nodeLineType3 <- text:nodeLineType3Text {
+{{ if eq .target "go" }}
     if strings.TrimSpace(text.(string)) == "" {
         return nil, nil
     }
-    return &StoryNodeLine{
+    return retWrap(&StorySectionLine{
         Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
         Name: "sayRaw",
         Params: []string{text.(string)},
-    }, nil
+    }, nil)
+{{ else }}
+    if (StringTools.trim(c.text) == "") {
+        return retWrap(null, null);
+    }
+    return retWrap({
+        pos:[c.pos.line, c.pos.col, c.pos.offset],
+        name:'sayRaw',
+        type:"",
+        params:[text],
+    }, nil);
+{{ end }}
 }
 
-_storyNodeCodeBlock <- ( ( !"}!" . )* ) { return strings.TrimSpace(string(c.text)), nil }
+_storyNodeCodeBlock <- ( ( !"}!" . )* ) { return retWrap(toStrWithTrim(c.text), nil); }
 
+funcInvoke <- '(' sp ')' { {{ if eq .target "go" }} return retWrap([]string{}, nil) {{ else }} return retWrap([], nil); {{ end }} }
+            / '(' sp first:codeExpr rest:(funcInvokeParamExtend*) ')' { return retWrap(gatherParams(first, rest), nil); }
 
-funcInvoke <- '(' sp ')' { return []string{}, nil }
-            / '(' sp first:codeExpr rest:(funcInvokeParamExtend*) ')' { return gatherParams(first, rest), nil }
+funcInvokeParamExtend <- sp ',' sp e:codeExpr { return retWrap(e, nil); }
 
-funcInvokeParamExtend <- sp ',' sp e:codeExpr { return e, nil }
-
-// codeExpr <- [^\n,)]+ { return string(c.text), nil }
-codeExpr <- codeExpr2 { return string(c.text), nil }
+// codeExpr <- [^\n,)]+ { return retWrap(toStr(c.text), nil); }
+codeExpr <- codeExpr2 { return retWrap(toStr(c.text), nil); }
 
 codeExpr2 <- identifier
            / integer
            / [0-9]* '.' [0-9]+
            / stringType
 
-stringType <- (codeString / '`' [^`]* '`') { return string(c.text), nil }
+stringType <- (codeString / '`' [^`]* '`') { return retWrap(toStr(c.text), nil); }
 
 codeString ← '"' ( !EscapedChar . / '\\' EscapeSequence )* '"'
            / '\'' ( !EscapedChar2 . / '\\' EscapeSequence2 )* '\''
@@ -180,11 +314,15 @@ NonZeroDecimalDigit ← [1-9]
 HexDigit ← [0-9a-f]i
 
 integer <- '-'? [0-9]+ {
-    return strconv.Atoi(string(c.text))
+{{ if eq .target "go" }}
+    return strconv.Atoi(string(c.text));
+{{ else }}
+    return retWrap(Std.parseInt(c.text), nil);
+{{ end }}
 }
 
 identifier <- xidStart xidContinue* {
-    return string(c.text), nil
+    return retWrap(toStr(c.text), nil);
 }
 
 // L + Other_ID_Start
