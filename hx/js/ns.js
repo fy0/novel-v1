@@ -15,6 +15,21 @@ class StoryLoader {
 		while(_g < _g1.length) {
 			let i = _g1[_g];
 			++_g;
+			let cur = i.lines.length - 1;
+			while(cur >= 0 && i.lines[cur].type == "" && i.lines[cur].text == "\n") --cur;
+			if(cur == -1) {
+				i.lines = [];
+			} else if(i.lines[cur].type == "" || i.lines[cur].type == "codeInText") {
+				i.lines = i.lines.slice(0,cur + 2);
+			} else {
+				i.lines = i.lines.slice(0,cur + 1);
+			}
+		}
+		let _g2 = 0;
+		let _g3 = s1.items;
+		while(_g2 < _g3.length) {
+			let i = _g3[_g2];
+			++_g2;
 			if(i.next == "" || i.next == null) {
 				continue;
 			}
@@ -38,12 +53,12 @@ class StoryLoader {
 					if(nodeName == null || nodeName == "") {
 						nodeName = "<noname>";
 					}
-					haxe_Log.trace("node:",{ fileName : "Eval.hx", lineNumber : 54, className : "StoryLoader", methodName : "eval", customParams : [nodeName]});
+					haxe_Log.trace("node:",{ fileName : "Eval.hx", lineNumber : 75, className : "StoryLoader", methodName : "eval", customParams : [nodeName]});
 				}
 				if(i.condition != null && i.condition != "") {
 					if(_gthis.codeCallback != null) {
-						let valid = (await _gthis.codeCallback(_gthis,i.condition));
-						if(!valid) {
+						let valid = (await _gthis.codeCallback(_gthis,i.condition,"bool"));
+						if(!js_Boot.__cast(valid , Bool)) {
 							++curIndex;
 							continue;
 						}
@@ -57,18 +72,21 @@ class StoryLoader {
 					switch(line.type) {
 					case "":
 						if(_gthis.debug) {
-							haxe_Log.trace("line - invoke",{ fileName : "Eval.hx", lineNumber : 71, className : "StoryLoader", methodName : "eval", customParams : [line.name,line.params]});
+							haxe_Log.trace("line - text",{ fileName : "Eval.hx", lineNumber : 92, className : "StoryLoader", methodName : "eval", customParams : [line.text]});
 						}
-						if(!(await _gthis.invokeCallback(_gthis,line.name,line.params))) {
-							haxe_Log.trace("[Line " + line.pos[0] + " Col " + line.pos[1] + "] ERROR: invoke unsolved",{ fileName : "Eval.hx", lineNumber : 74, className : "StoryLoader", methodName : "eval"});
-						}
+						(await _gthis.textCallback(_gthis,line.text));
 						break;
-					case "code":
+					case "codeBlock":case "codeInText":
 						if(_gthis.debug) {
-							haxe_Log.trace("line - code",{ fileName : "Eval.hx", lineNumber : 78, className : "StoryLoader", methodName : "eval", customParams : [line.code]});
+							haxe_Log.trace("line - code",{ fileName : "Eval.hx", lineNumber : 97, className : "StoryLoader", methodName : "eval", customParams : [line.code]});
 						}
-						if(line.code != null) {
-							(await _gthis.codeCallback(_gthis,line.code));
+						let returnAs = "any";
+						if(line.type == "codeInText") {
+							returnAs = "string";
+						}
+						let ret = (await _gthis.codeCallback(_gthis,line.code,returnAs));
+						if(line.type == "codeInText") {
+							(await _gthis.textCallback(_gthis,"" + ret));
 						}
 						break;
 					}
@@ -91,18 +109,6 @@ class HxOverrides {
 			return undefined;
 		}
 		return x;
-	}
-	static substr(s,pos,len) {
-		if(len == null) {
-			len = s.length;
-		} else if(len < 0) {
-			if(pos == 0) {
-				len = s.length + len;
-			} else {
-				return "";
-			}
-		}
-		return s.substr(pos,len);
 	}
 	static now() {
 		return Date.now();
@@ -851,7 +857,7 @@ function Unicode_is16(ranges,r) {
 			}
 			if(UInt.gte(i[1],r)) {
 				if(i[2] != 1) {
-					return (UInt.toFloat(r - i[0]) % UInt.toFloat(i[2]) | 0) == 0;
+					return (UInt.toFloat(UInt.toFloat(r - i[0]) % UInt.toFloat(i[2]) | 0) | 0) == 0;
 				} else {
 					return true;
 				}
@@ -866,7 +872,7 @@ function Unicode_is16(ranges,r) {
 		let range_ = ranges[m];
 		if(UInt.gte(r,range_[0]) && UInt.gte(range_[1],r)) {
 			if(range_[2] != 1) {
-				return (UInt.toFloat(r - range_[0]) % UInt.toFloat(range_[2]) | 0) == 0;
+				return (UInt.toFloat(UInt.toFloat(r - range_[0]) % UInt.toFloat(range_[2]) | 0) | 0) == 0;
 			} else {
 				return true;
 			}
@@ -929,53 +935,6 @@ function Unicode_Is(rangeTab,r) {
 	}
 	return false;
 }
-class Std {
-	static string(s) {
-		return js_Boot.__string_rec(s,"");
-	}
-	static parseInt(x) {
-		let v = parseInt(x);
-		if(isNaN(v)) {
-			return null;
-		}
-		return v;
-	}
-}
-Std.__name__ = true;
-class StringTools {
-	static isSpace(s,pos) {
-		let c = HxOverrides.cca(s,pos);
-		if(!(c > 8 && c < 14)) {
-			return c == 32;
-		} else {
-			return true;
-		}
-	}
-	static ltrim(s) {
-		let l = s.length;
-		let r = 0;
-		while(r < l && StringTools.isSpace(s,r)) ++r;
-		if(r > 0) {
-			return HxOverrides.substr(s,r,l - r);
-		} else {
-			return s;
-		}
-	}
-	static rtrim(s) {
-		let l = s.length;
-		let r = 0;
-		while(r < l && StringTools.isSpace(s,l - r - 1)) ++r;
-		if(r > 0) {
-			return HxOverrides.substr(s,0,l - r);
-		} else {
-			return s;
-		}
-	}
-	static trim(s) {
-		return StringTools.ltrim(StringTools.rtrim(s));
-	}
-}
-StringTools.__name__ = true;
 function NovelPeg_parseFilterNil(lines) {
 	let items = [];
 	if(((lines) instanceof Array)) {
@@ -985,501 +944,33 @@ function NovelPeg_parseFilterNil(lines) {
 			let i = x[_g];
 			++_g;
 			if(i != null) {
-				items.push(i);
+				if(((i) instanceof Array)) {
+					let _g = 0;
+					let _g1 = NovelPeg_parseFilterNil(i);
+					while(_g < _g1.length) {
+						let j = _g1[_g];
+						++_g;
+						items.push(j);
+					}
+				} else {
+					items.push(i);
+				}
 			}
 		}
 	}
 	return items;
 }
-function NovelPeg_gatherParams(first,v) {
-	if(v == null) {
-		return null;
-	}
-	let items = [first];
-	let _g = 0;
-	let _g1 = NovelPeg_parseFilterNil(v);
-	while(_g < _g1.length) {
-		let i = _g1[_g];
-		++_g;
-		items.push(i);
-	}
-	return items;
+function NovelPeg_parseReturnTextSectionLine(c,text) {
+	return NovelPeg_retWrap({ pos : [c.pos.line,c.pos.col,c.pos.offset], type : "", text : text},NovelPeg_nil);
+}
+function NovelPeg_parseReturnCodeSectionLine(c,typeName,code) {
+	return NovelPeg_retWrap({ pos : [c.pos.line,c.pos.col,c.pos.offset], type : typeName, code : code},NovelPeg_nil);
 }
 function NovelPeg_retWrap(a,err) {
 	return { val : a, err : err};
 }
 function NovelPeg_toStr(x) {
 	return x;
-}
-function NovelPeg_toStrWithTrim(x) {
-	return StringTools.trim(x);
-}
-function NovelPeg__oninput17(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput17(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput17(p.cur);
-}
-function NovelPeg__oninput30(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput30(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput30(p.cur);
-}
-function NovelPeg__oninput25(c,cond) {
-	return NovelPeg_retWrap(cond,NovelPeg_nil);
-}
-function NovelPeg__calloninput25(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput25(p.cur,stack.h["cond"]);
-}
-function NovelPeg__oninput42(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput42(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput42(p.cur);
-}
-function NovelPeg__oninput38(c,name) {
-	return NovelPeg_retWrap(name,NovelPeg_nil);
-}
-function NovelPeg__calloninput38(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput38(p.cur,stack.h["name"]);
-}
-function NovelPeg__oninput57(c) {
-	return NovelPeg_retWrap(NovelPeg_nil,NovelPeg_nil);
-}
-function NovelPeg__calloninput57(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput57(p.cur);
-}
-function NovelPeg__oninput72(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput72(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput72(p.cur);
-}
-function NovelPeg__oninput79(c) {
-	return NovelPeg_retWrap([],NovelPeg_nil);
-}
-function NovelPeg__calloninput79(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput79(p.cur);
-}
-function NovelPeg__oninput93(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput93(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput93(p.cur);
-}
-function NovelPeg__oninput98(c) {
-	return NovelPeg_retWrap(Std.parseInt(c.text),NovelPeg_nil);
-}
-function NovelPeg__calloninput98(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput98(p.cur);
-}
-function NovelPeg__oninput110(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput110(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput110(p.cur);
-}
-function NovelPeg__oninput91(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput91(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput91(p.cur);
-}
-function NovelPeg__oninput167(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput167(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput167(p.cur);
-}
-function NovelPeg__oninput172(c) {
-	return NovelPeg_retWrap(Std.parseInt(c.text),NovelPeg_nil);
-}
-function NovelPeg__calloninput172(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput172(p.cur);
-}
-function NovelPeg__oninput184(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput184(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput184(p.cur);
-}
-function NovelPeg__oninput165(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput165(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput165(p.cur);
-}
-function NovelPeg__oninput157(c,e) {
-	return NovelPeg_retWrap(e,NovelPeg_nil);
-}
-function NovelPeg__calloninput157(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput157(p.cur,stack.h["e"]);
-}
-function NovelPeg__oninput85(c,first,rest) {
-	let tmp = NovelPeg_gatherParams(first,rest);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput85(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput85(p.cur,stack.h["first"],stack.h["rest"]);
-}
-function NovelPeg__oninput68(c,name,params) {
-	return NovelPeg_retWrap({ type : "", pos : [c.pos.line,c.pos.col,c.pos.offset], name : name, params : params},NovelPeg_nil);
-}
-function NovelPeg__calloninput68(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput68(p.cur,stack.h["name"],stack.h["params"]);
-}
-function NovelPeg__oninput236(c) {
-	let tmp = NovelPeg_toStrWithTrim(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput236(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput236(p.cur);
-}
-function NovelPeg__oninput232(c,code) {
-	return NovelPeg_retWrap({ pos : [c.pos.line,c.pos.col,c.pos.offset], type : "code", code : code},NovelPeg_nil);
-}
-function NovelPeg__calloninput232(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput232(p.cur,stack.h["code"]);
-}
-function NovelPeg__oninput248(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput248(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput248(p.cur);
-}
-function NovelPeg__oninput246(c,text) {
-	if(StringTools.trim(c.text) == "") {
-		return NovelPeg_retWrap(null,null);
-	}
-	return NovelPeg_retWrap({ pos : [c.pos.line,c.pos.col,c.pos.offset], name : "sayRaw", type : "", params : [text]},NovelPeg_nil);
-}
-function NovelPeg__calloninput246(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput246(p.cur,stack.h["text"]);
-}
-function NovelPeg__oninput52(c,lines) {
-	return NovelPeg_retWrap(lines,NovelPeg_nil);
-}
-function NovelPeg__calloninput52(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput52(p.cur,stack.h["lines"]);
-}
-function NovelPeg__oninput10(c,name,cond,next,lines) {
-	let e = c.data.setSectionIndex(name);
-	if(e != null) {
-		return NovelPeg_retWrap(null,e);
-	}
-	let tmp = [c.pos.line,c.pos.col,c.pos.offset];
-	let tmp1 = NovelPeg_parseFilterNil(lines);
-	let tmp2 = c.data.getNextIndex();
-	return NovelPeg_retWrap({ pos : tmp, name : name, lines : tmp1, condition : cond, next : next, nextIndex : tmp2},NovelPeg_nil);
-}
-function NovelPeg__calloninput10(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput10(p.cur,stack.h["name"],stack.h["cond"],stack.h["next"],stack.h["lines"]);
-}
-function NovelPeg__oninput263(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput263(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput263(p.cur);
-}
-function NovelPeg__oninput277(c) {
-	return NovelPeg_retWrap(NovelPeg_nil,NovelPeg_nil);
-}
-function NovelPeg__calloninput277(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput277(p.cur);
-}
-function NovelPeg__oninput292(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput292(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput292(p.cur);
-}
-function NovelPeg__oninput299(c) {
-	return NovelPeg_retWrap([],NovelPeg_nil);
-}
-function NovelPeg__calloninput299(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput299(p.cur);
-}
-function NovelPeg__oninput313(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput313(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput313(p.cur);
-}
-function NovelPeg__oninput318(c) {
-	return NovelPeg_retWrap(Std.parseInt(c.text),NovelPeg_nil);
-}
-function NovelPeg__calloninput318(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput318(p.cur);
-}
-function NovelPeg__oninput330(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput330(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput330(p.cur);
-}
-function NovelPeg__oninput311(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput311(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput311(p.cur);
-}
-function NovelPeg__oninput387(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput387(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput387(p.cur);
-}
-function NovelPeg__oninput392(c) {
-	return NovelPeg_retWrap(Std.parseInt(c.text),NovelPeg_nil);
-}
-function NovelPeg__calloninput392(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput392(p.cur);
-}
-function NovelPeg__oninput404(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput404(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput404(p.cur);
-}
-function NovelPeg__oninput385(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput385(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput385(p.cur);
-}
-function NovelPeg__oninput377(c,e) {
-	return NovelPeg_retWrap(e,NovelPeg_nil);
-}
-function NovelPeg__calloninput377(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput377(p.cur,stack.h["e"]);
-}
-function NovelPeg__oninput305(c,first,rest) {
-	let tmp = NovelPeg_gatherParams(first,rest);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput305(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput305(p.cur,stack.h["first"],stack.h["rest"]);
-}
-function NovelPeg__oninput288(c,name,params) {
-	return NovelPeg_retWrap({ type : "", pos : [c.pos.line,c.pos.col,c.pos.offset], name : name, params : params},NovelPeg_nil);
-}
-function NovelPeg__calloninput288(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput288(p.cur,stack.h["name"],stack.h["params"]);
-}
-function NovelPeg__oninput456(c) {
-	let tmp = NovelPeg_toStrWithTrim(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput456(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput456(p.cur);
-}
-function NovelPeg__oninput452(c,code) {
-	return NovelPeg_retWrap({ pos : [c.pos.line,c.pos.col,c.pos.offset], type : "code", code : code},NovelPeg_nil);
-}
-function NovelPeg__calloninput452(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput452(p.cur,stack.h["code"]);
-}
-function NovelPeg__oninput468(c) {
-	let tmp = NovelPeg_toStr(c.text);
-	return NovelPeg_retWrap(tmp,NovelPeg_nil);
-}
-function NovelPeg__calloninput468(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput468(p.cur);
-}
-function NovelPeg__oninput466(c,text) {
-	if(StringTools.trim(c.text) == "") {
-		return NovelPeg_retWrap(null,null);
-	}
-	return NovelPeg_retWrap({ pos : [c.pos.line,c.pos.col,c.pos.offset], name : "sayRaw", type : "", params : [text]},NovelPeg_nil);
-}
-function NovelPeg__calloninput466(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput466(p.cur,stack.h["text"]);
-}
-function NovelPeg__oninput272(c,lines) {
-	return NovelPeg_retWrap(lines,NovelPeg_nil);
-}
-function NovelPeg__calloninput272(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput272(p.cur,stack.h["lines"]);
-}
-function NovelPeg__oninput258(c,name,lines) {
-	let e = c.data.setSectionIndex(name);
-	if(e != null) {
-		return NovelPeg_retWrap(null,e);
-	}
-	let tmp = [c.pos.line,c.pos.col,c.pos.offset];
-	let tmp1 = NovelPeg_parseFilterNil(lines);
-	let tmp2 = c.data.getNextIndex();
-	return NovelPeg_retWrap({ pos : tmp, name : name, lines : tmp1, nextIndex : tmp2},NovelPeg_nil);
-}
-function NovelPeg__calloninput258(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput258(p.cur,stack.h["name"],stack.h["lines"]);
-}
-function NovelPeg__oninput6(c,nodes) {
-	return NovelPeg_retWrap(new Story(nodes),NovelPeg_nil);
-}
-function NovelPeg__calloninput6(p) {
-	let _this = p.vstack;
-	let stack = _this.head == null ? null : _this.head.elt;
-	let _ = stack;
-	return NovelPeg__oninput6(p.cur,stack.h["nodes"]);
 }
 function NovelPeg__oninput1(c,x) {
 	return NovelPeg_retWrap(x,NovelPeg_nil);
@@ -1489,6 +980,215 @@ function NovelPeg__calloninput1(p) {
 	let stack = _this.head == null ? null : _this.head.elt;
 	let _ = stack;
 	return NovelPeg__oninput1(p.cur,stack.h["x"]);
+}
+function NovelPeg__onnodes1(c,nodes) {
+	return NovelPeg_retWrap(new Story(nodes),NovelPeg_nil);
+}
+function NovelPeg__callonnodes1(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodes1(p.cur,stack.h["nodes"]);
+}
+function NovelPeg__on_nodeCond1(c,cond) {
+	return NovelPeg_retWrap(cond,NovelPeg_nil);
+}
+function NovelPeg__callon_nodeCond1(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__on_nodeCond1(p.cur,stack.h["cond"]);
+}
+function NovelPeg__onnodeType18(c) {
+	let tmp = NovelPeg_toStr(c.text);
+	return NovelPeg_retWrap(tmp,NovelPeg_nil);
+}
+function NovelPeg__callonnodeType18(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeType18(p.cur);
+}
+function NovelPeg__onnodeType125(c) {
+	let tmp = NovelPeg_toStr(c.text);
+	return NovelPeg_retWrap(tmp,NovelPeg_nil);
+}
+function NovelPeg__callonnodeType125(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeType125(p.cur);
+}
+function NovelPeg__onnodeType121(c,name) {
+	return NovelPeg_retWrap(name,NovelPeg_nil);
+}
+function NovelPeg__callonnodeType121(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeType121(p.cur,stack.h["name"]);
+}
+function NovelPeg__onnodeType11(c,name,cond,next,lines) {
+	let e = c.data.setSectionIndex(name);
+	if(e != null) {
+		return NovelPeg_retWrap(null,e);
+	}
+	let tmp = [c.pos.line,c.pos.col,c.pos.offset];
+	let tmp1 = NovelPeg_parseFilterNil(lines);
+	let tmp2 = c.data.getNextIndex();
+	return NovelPeg_retWrap({ pos : tmp, name : name, lines : tmp1, condition : cond, next : next, nextIndex : tmp2},NovelPeg_nil);
+}
+function NovelPeg__callonnodeType11(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeType11(p.cur,stack.h["name"],stack.h["cond"],stack.h["next"],stack.h["lines"]);
+}
+function NovelPeg__onnodeType28(c) {
+	let tmp = NovelPeg_toStr(c.text);
+	return NovelPeg_retWrap(tmp,NovelPeg_nil);
+}
+function NovelPeg__callonnodeType28(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeType28(p.cur);
+}
+function NovelPeg__onnodeType21(c,name,lines) {
+	let e = c.data.setSectionIndex(name);
+	if(e != null) {
+		return NovelPeg_retWrap(null,e);
+	}
+	let tmp = [c.pos.line,c.pos.col,c.pos.offset];
+	let tmp1 = NovelPeg_parseFilterNil(lines);
+	let tmp2 = c.data.getNextIndex();
+	return NovelPeg_retWrap({ pos : tmp, name : name, lines : tmp1, nextIndex : tmp2},NovelPeg_nil);
+}
+function NovelPeg__callonnodeType21(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeType21(p.cur,stack.h["name"],stack.h["lines"]);
+}
+function NovelPeg__onnodeLines1(c,lines) {
+	return NovelPeg_retWrap(lines,NovelPeg_nil);
+}
+function NovelPeg__callonnodeLines1(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLines1(p.cur,stack.h["lines"]);
+}
+function NovelPeg__onnodeLine2(c) {
+	return NovelPeg_retWrap(NovelPeg_nil,NovelPeg_nil);
+}
+function NovelPeg__callonnodeLine2(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLine2(p.cur);
+}
+function NovelPeg__onnodeLineType21(c,code) {
+	return NovelPeg_parseReturnCodeSectionLine(c,"codeBlock",code);
+}
+function NovelPeg__callonnodeLineType21(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLineType21(p.cur,stack.h["code"]);
+}
+function NovelPeg__onnodeLineExprBlock1(c,expr) {
+	return NovelPeg_parseReturnCodeSectionLine(c,"codeInText",expr);
+}
+function NovelPeg__callonnodeLineExprBlock1(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLineExprBlock1(p.cur,stack.h["expr"]);
+}
+function NovelPeg__onnodeLineCommonText12(c) {
+	return NovelPeg_retWrap("{",NovelPeg_nil);
+}
+function NovelPeg__callonnodeLineCommonText12(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLineCommonText12(p.cur);
+}
+function NovelPeg__onnodeLineCommonText14(c) {
+	let tmp = NovelPeg_toStr(c.text);
+	return NovelPeg_retWrap(tmp,NovelPeg_nil);
+}
+function NovelPeg__callonnodeLineCommonText14(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLineCommonText14(p.cur);
+}
+function NovelPeg__onnodeLineCommonText8(c,items) {
+	let items2 = [];
+	if(((items) instanceof Array)) {
+		let itemsX = items;
+		let _g = 0;
+		while(_g < itemsX.length) {
+			let i = itemsX[_g];
+			++_g;
+			items2.push(i);
+		}
+	}
+	let text = items2.join("");
+	return NovelPeg_parseReturnTextSectionLine(c,text);
+}
+function NovelPeg__callonnodeLineCommonText8(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLineCommonText8(p.cur,stack.h["items"]);
+}
+function NovelPeg__onnodeLineCommonText1(c,items) {
+	let x = NovelPeg_parseReturnTextSectionLine(c,"\n");
+	let items2 = null;
+	if(((items) instanceof Array)) {
+		items2 = items;
+		items2.push(x.val);
+	}
+	return NovelPeg_retWrap(items2,NovelPeg_nil);
+}
+function NovelPeg__callonnodeLineCommonText1(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onnodeLineCommonText1(p.cur,stack.h["items"]);
+}
+function NovelPeg__onCode1(c) {
+	let tmp = NovelPeg_toStr(c.text);
+	return NovelPeg_retWrap(tmp,NovelPeg_nil);
+}
+function NovelPeg__callonCode1(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onCode1(p.cur);
+}
+function NovelPeg__onCodeExpr1(c) {
+	let tmp = NovelPeg_toStr(c.text);
+	return NovelPeg_retWrap(tmp,NovelPeg_nil);
+}
+function NovelPeg__callonCodeExpr1(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onCodeExpr1(p.cur);
+}
+function NovelPeg__onCodeExpr21(c) {
+	let tmp = NovelPeg_toStr(c.text);
+	return NovelPeg_retWrap(tmp,NovelPeg_nil);
+}
+function NovelPeg__callonCodeExpr21(p) {
+	let _this = p.vstack;
+	let stack = _this.head == null ? null : _this.head.elt;
+	let _ = stack;
+	return NovelPeg__onCodeExpr21(p.cur);
 }
 function NovelPeg_savepointClone(x) {
 	return { line : x.line, col : x.col, offset : x.offset, rn : x.rn, w : x.w};
@@ -1503,6 +1203,12 @@ function NovelPeg_listJoin(list,sep,lastSep) {
 		return list.slice(0,list.length - 1).join(sep) + " " + lastSep + " " + list[list.length - 1];
 	}
 }
+class Std {
+	static string(s) {
+		return js_Boot.__string_rec(s,"");
+	}
+}
+Std.__name__ = true;
 class UInt {
 	static gt(a,b) {
 		let aNeg = a < 0;
@@ -2030,7 +1736,7 @@ var Unicode_Mn = Unicode__Mn;
 var Unicode_Other_ID_Continue = Unicode__Other_ID_Continue;
 var Unicode_Other_ID_Start = Unicode__Other_ID_Start;
 var NovelPeg_nil = null;
-var NovelPeg_g = { rules : [{ name : "input", pos : { line : 127, col : 1, offset : 2549}, expr : AllExpr.ActionExpr({ pos : { line : 127, col : 10, offset : 2558}, run : NovelPeg__calloninput1, expr : AllExpr.SeqExpr({ pos : { line : 127, col : 10, offset : 2558}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 127, col : 13, offset : 2561}, label : "x", expr : AllExpr.ActionExpr({ pos : { line : 131, col : 10, offset : 2618}, run : NovelPeg__calloninput6, expr : AllExpr.LabeledExpr({ pos : { line : 131, col : 10, offset : 2618}, label : "nodes", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 131, col : 17, offset : 2625}, expr : AllExpr.ChoiceExpr({ pos : { line : 149, col : 9, offset : 3157}, alternatives : [AllExpr.ActionExpr({ pos : { line : 151, col : 14, offset : 3195}, run : NovelPeg__calloninput10, expr : AllExpr.SeqExpr({ pos : { line : 151, col : 14, offset : 3195}, exprs : [AllExpr.LitMatcher({ pos : { line : 151, col : 14, offset : 3195}, val : ":", ignoreCase : false, want : "\":\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 336, col : 11, offset : 8761}, expr : AllExpr.CharClassMatcher({ pos : { line : 336, col : 11, offset : 8761}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 151, col : 25, offset : 3206}, label : "name", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 151, col : 30, offset : 3211}, expr : AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput17, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 336, col : 11, offset : 8761}, expr : AllExpr.CharClassMatcher({ pos : { line : 336, col : 11, offset : 8761}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 151, col : 50, offset : 3231}, label : "cond", expr : AllExpr.ActionExpr({ pos : { line : 146, col : 14, offset : 3015}, run : NovelPeg__calloninput25, expr : AllExpr.SeqExpr({ pos : { line : 146, col : 14, offset : 3015}, exprs : [AllExpr.LitMatcher({ pos : { line : 146, col : 14, offset : 3015}, val : "[", ignoreCase : false, want : "\"[\""}),AllExpr.LabeledExpr({ pos : { line : 146, col : 18, offset : 3019}, label : "cond", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 146, col : 23, offset : 3024}, expr : AllExpr.ActionExpr({ pos : { line : 145, col : 21, offset : 2954}, run : NovelPeg__calloninput30, expr : AllExpr.OneOrMoreExpr({ pos : { line : 145, col : 21, offset : 2954}, expr : AllExpr.CharClassMatcher({ pos : { line : 145, col : 21, offset : 2954}, val : "[^]]", chars : [HxOverrides.cca("]",0)], ranges : [], ignoreCase : false, inverted : true})})})})}),AllExpr.LitMatcher({ pos : { line : 146, col : 41, offset : 3042}, val : "]", ignoreCase : false, want : "\"]\""})]})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 336, col : 11, offset : 8761}, expr : AllExpr.CharClassMatcher({ pos : { line : 336, col : 11, offset : 8761}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 151, col : 72, offset : 3253}, label : "next", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 151, col : 77, offset : 3258}, expr : AllExpr.ActionExpr({ pos : { line : 147, col : 14, offset : 3091}, run : NovelPeg__calloninput38, expr : AllExpr.SeqExpr({ pos : { line : 147, col : 14, offset : 3091}, exprs : [AllExpr.LitMatcher({ pos : { line : 147, col : 14, offset : 3091}, val : "[", ignoreCase : false, want : "\"[\""}),AllExpr.LabeledExpr({ pos : { line : 147, col : 18, offset : 3095}, label : "name", expr : AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput42, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})}),AllExpr.LitMatcher({ pos : { line : 147, col : 34, offset : 3111}, val : "]", ignoreCase : false, want : "\"]\""})]})})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 336, col : 11, offset : 8761}, expr : AllExpr.CharClassMatcher({ pos : { line : 336, col : 11, offset : 8761}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.LabeledExpr({ pos : { line : 151, col : 99, offset : 3280}, label : "lines", expr : AllExpr.ActionExpr({ pos : { line : 215, col : 14, offset : 5003}, run : NovelPeg__calloninput52, expr : AllExpr.SeqExpr({ pos : { line : 215, col : 14, offset : 5003}, exprs : [AllExpr.LabeledExpr({ pos : { line : 215, col : 14, offset : 5003}, label : "lines", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 215, col : 20, offset : 5009}, expr : AllExpr.ChoiceExpr({ pos : { line : 217, col : 13, offset : 5069}, alternatives : [AllExpr.ActionExpr({ pos : { line : 219, col : 24, offset : 5163}, run : NovelPeg__calloninput57, expr : AllExpr.SeqExpr({ pos : { line : 219, col : 24, offset : 5163}, exprs : [AllExpr.LitMatcher({ pos : { line : 219, col : 24, offset : 5163}, val : "@#", ignoreCase : false, want : "\"@#\""}),AllExpr.OneOrMoreExpr({ pos : { line : 219, col : 32, offset : 5171}, expr : AllExpr.SeqExpr({ pos : { line : 219, col : 33, offset : 5172}, exprs : [AllExpr.NotExpr({ pos : { line : 219, col : 33, offset : 5172}, expr : AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 219, col : 37, offset : 5176})]})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 221, col : 18, offset : 5236}, run : NovelPeg__calloninput68, expr : AllExpr.SeqExpr({ pos : { line : 221, col : 18, offset : 5236}, exprs : [AllExpr.LitMatcher({ pos : { line : 221, col : 18, offset : 5236}, val : "@", ignoreCase : false, want : "\"@\""}),AllExpr.LabeledExpr({ pos : { line : 221, col : 22, offset : 5240}, label : "name", expr : AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput72, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})}),AllExpr.LabeledExpr({ pos : { line : 221, col : 38, offset : 5256}, label : "params", expr : AllExpr.ChoiceExpr({ pos : { line : 282, col : 15, offset : 6890}, alternatives : [AllExpr.ActionExpr({ pos : { line : 282, col : 15, offset : 6890}, run : NovelPeg__calloninput79, expr : AllExpr.SeqExpr({ pos : { line : 282, col : 15, offset : 6890}, exprs : [AllExpr.LitMatcher({ pos : { line : 282, col : 15, offset : 6890}, val : "(", ignoreCase : false, want : "\"(\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 282, col : 22, offset : 6897}, val : ")", ignoreCase : false, want : "\")\""})]})}),AllExpr.ActionExpr({ pos : { line : 283, col : 15, offset : 7023}, run : NovelPeg__calloninput85, expr : AllExpr.SeqExpr({ pos : { line : 283, col : 15, offset : 7023}, exprs : [AllExpr.LitMatcher({ pos : { line : 283, col : 15, offset : 7023}, val : "(", ignoreCase : false, want : "\"(\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 283, col : 22, offset : 7030}, label : "first", expr : AllExpr.ActionExpr({ pos : { line : 288, col : 13, offset : 7288}, run : NovelPeg__calloninput91, expr : AllExpr.ChoiceExpr({ pos : { line : 290, col : 14, offset : 7354}, alternatives : [AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput93, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 316, col : 12, offset : 8242}, run : NovelPeg__calloninput98, expr : AllExpr.SeqExpr({ pos : { line : 316, col : 12, offset : 8242}, exprs : [AllExpr.ZeroOrOneExpr({ pos : { line : 316, col : 12, offset : 8242}, expr : AllExpr.LitMatcher({ pos : { line : 316, col : 12, offset : 8242}, val : "-", ignoreCase : false, want : "\"-\""})}),AllExpr.OneOrMoreExpr({ pos : { line : 316, col : 17, offset : 8247}, expr : AllExpr.CharClassMatcher({ pos : { line : 316, col : 17, offset : 8247}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]})}),AllExpr.SeqExpr({ pos : { line : 292, col : 14, offset : 7401}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 292, col : 14, offset : 7401}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 14, offset : 7401}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 292, col : 21, offset : 7408}, val : ".", ignoreCase : false, want : "\".\""}),AllExpr.OneOrMoreExpr({ pos : { line : 292, col : 25, offset : 7412}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 25, offset : 7412}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]}),AllExpr.ActionExpr({ pos : { line : 295, col : 15, offset : 7461}, run : NovelPeg__calloninput110, expr : AllExpr.ChoiceExpr({ pos : { line : 295, col : 16, offset : 7462}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 14, offset : 7548}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 14, offset : 7548}, val : "\"", ignoreCase : false, want : "\"\\\"\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 297, col : 18, offset : 7552}, expr : AllExpr.ChoiceExpr({ pos : { line : 297, col : 20, offset : 7554}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 20, offset : 7554}, exprs : [AllExpr.NotExpr({ pos : { line : 297, col : 20, offset : 7554}, expr : AllExpr.CharClassMatcher({ pos : { line : 308, col : 15, offset : 7988}, val : "[\"\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 297, col : 33, offset : 7567})]}),AllExpr.SeqExpr({ pos : { line : 297, col : 37, offset : 7571}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 37, offset : 7571}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 309, col : 18, offset : 8023}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 310, col : 20, offset : 8078}, val : "[\"\\\\/bfnrt]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 297, col : 60, offset : 7594}, val : "\"", ignoreCase : false, want : "\"\\\"\""})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 14, offset : 7612}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 14, offset : 7612}, val : "'", ignoreCase : false, want : "\"'\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 298, col : 19, offset : 7617}, expr : AllExpr.ChoiceExpr({ pos : { line : 298, col : 21, offset : 7619}, alternatives : [AllExpr.SeqExpr({ pos : { line : 298, col : 21, offset : 7619}, exprs : [AllExpr.NotExpr({ pos : { line : 298, col : 21, offset : 7619}, expr : AllExpr.CharClassMatcher({ pos : { line : 300, col : 16, offset : 7686}, val : "[\\\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 298, col : 35, offset : 7633})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 39, offset : 7637}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 39, offset : 7637}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 301, col : 19, offset : 7722}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 302, col : 21, offset : 7779}, val : "[\\\\\\/bfnrt]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 298, col : 63, offset : 7661}, val : "'", ignoreCase : false, want : "\"'\""})]}),AllExpr.SeqExpr({ pos : { line : 295, col : 29, offset : 7475}, exprs : [AllExpr.LitMatcher({ pos : { line : 295, col : 29, offset : 7475}, val : "`", ignoreCase : false, want : "\"`\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 295, col : 33, offset : 7479}, expr : AllExpr.CharClassMatcher({ pos : { line : 295, col : 33, offset : 7479}, val : "[^`]", chars : [HxOverrides.cca("`",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.LitMatcher({ pos : { line : 295, col : 39, offset : 7485}, val : "`", ignoreCase : false, want : "\"`\""})]})]})})]})})}),AllExpr.LabeledExpr({ pos : { line : 283, col : 37, offset : 7045}, label : "rest", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 283, col : 43, offset : 7051}, expr : AllExpr.ActionExpr({ pos : { line : 285, col : 26, offset : 7159}, run : NovelPeg__calloninput157, expr : AllExpr.SeqExpr({ pos : { line : 285, col : 26, offset : 7159}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 285, col : 29, offset : 7162}, val : ",", ignoreCase : false, want : "\",\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 285, col : 36, offset : 7169}, label : "e", expr : AllExpr.ActionExpr({ pos : { line : 288, col : 13, offset : 7288}, run : NovelPeg__calloninput165, expr : AllExpr.ChoiceExpr({ pos : { line : 290, col : 14, offset : 7354}, alternatives : [AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput167, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 316, col : 12, offset : 8242}, run : NovelPeg__calloninput172, expr : AllExpr.SeqExpr({ pos : { line : 316, col : 12, offset : 8242}, exprs : [AllExpr.ZeroOrOneExpr({ pos : { line : 316, col : 12, offset : 8242}, expr : AllExpr.LitMatcher({ pos : { line : 316, col : 12, offset : 8242}, val : "-", ignoreCase : false, want : "\"-\""})}),AllExpr.OneOrMoreExpr({ pos : { line : 316, col : 17, offset : 8247}, expr : AllExpr.CharClassMatcher({ pos : { line : 316, col : 17, offset : 8247}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]})}),AllExpr.SeqExpr({ pos : { line : 292, col : 14, offset : 7401}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 292, col : 14, offset : 7401}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 14, offset : 7401}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 292, col : 21, offset : 7408}, val : ".", ignoreCase : false, want : "\".\""}),AllExpr.OneOrMoreExpr({ pos : { line : 292, col : 25, offset : 7412}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 25, offset : 7412}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]}),AllExpr.ActionExpr({ pos : { line : 295, col : 15, offset : 7461}, run : NovelPeg__calloninput184, expr : AllExpr.ChoiceExpr({ pos : { line : 295, col : 16, offset : 7462}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 14, offset : 7548}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 14, offset : 7548}, val : "\"", ignoreCase : false, want : "\"\\\"\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 297, col : 18, offset : 7552}, expr : AllExpr.ChoiceExpr({ pos : { line : 297, col : 20, offset : 7554}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 20, offset : 7554}, exprs : [AllExpr.NotExpr({ pos : { line : 297, col : 20, offset : 7554}, expr : AllExpr.CharClassMatcher({ pos : { line : 308, col : 15, offset : 7988}, val : "[\"\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 297, col : 33, offset : 7567})]}),AllExpr.SeqExpr({ pos : { line : 297, col : 37, offset : 7571}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 37, offset : 7571}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 309, col : 18, offset : 8023}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 310, col : 20, offset : 8078}, val : "[\"\\\\/bfnrt]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 297, col : 60, offset : 7594}, val : "\"", ignoreCase : false, want : "\"\\\"\""})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 14, offset : 7612}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 14, offset : 7612}, val : "'", ignoreCase : false, want : "\"'\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 298, col : 19, offset : 7617}, expr : AllExpr.ChoiceExpr({ pos : { line : 298, col : 21, offset : 7619}, alternatives : [AllExpr.SeqExpr({ pos : { line : 298, col : 21, offset : 7619}, exprs : [AllExpr.NotExpr({ pos : { line : 298, col : 21, offset : 7619}, expr : AllExpr.CharClassMatcher({ pos : { line : 300, col : 16, offset : 7686}, val : "[\\\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 298, col : 35, offset : 7633})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 39, offset : 7637}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 39, offset : 7637}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 301, col : 19, offset : 7722}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 302, col : 21, offset : 7779}, val : "[\\\\\\/bfnrt]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 298, col : 63, offset : 7661}, val : "'", ignoreCase : false, want : "\"'\""})]}),AllExpr.SeqExpr({ pos : { line : 295, col : 29, offset : 7475}, exprs : [AllExpr.LitMatcher({ pos : { line : 295, col : 29, offset : 7475}, val : "`", ignoreCase : false, want : "\"`\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 295, col : 33, offset : 7479}, expr : AllExpr.CharClassMatcher({ pos : { line : 295, col : 33, offset : 7479}, val : "[^`]", chars : [HxOverrides.cca("`",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.LitMatcher({ pos : { line : 295, col : 39, offset : 7485}, val : "`", ignoreCase : false, want : "\"`\""})]})]})})]})})})]})})})}),AllExpr.LitMatcher({ pos : { line : 283, col : 67, offset : 7075}, val : ")", ignoreCase : false, want : "\")\""})]})})]})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 240, col : 18, offset : 5708}, run : NovelPeg__calloninput232, expr : AllExpr.SeqExpr({ pos : { line : 240, col : 18, offset : 5708}, exprs : [AllExpr.LitMatcher({ pos : { line : 240, col : 18, offset : 5708}, val : "@{", ignoreCase : false, want : "\"@{\""}),AllExpr.LabeledExpr({ pos : { line : 240, col : 23, offset : 5713}, label : "code", expr : AllExpr.ActionExpr({ pos : { line : 280, col : 24, offset : 6808}, run : NovelPeg__calloninput236, expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 280, col : 26, offset : 6810}, expr : AllExpr.SeqExpr({ pos : { line : 280, col : 28, offset : 6812}, exprs : [AllExpr.NotExpr({ pos : { line : 280, col : 28, offset : 6812}, expr : AllExpr.LitMatcher({ pos : { line : 280, col : 29, offset : 6813}, val : "}!", ignoreCase : false, want : "\"}!\""})}),AllExpr.AnyMatcher({ line : 280, col : 34, offset : 6818})]})})})}),AllExpr.LitMatcher({ pos : { line : 240, col : 48, offset : 5738}, val : "}!", ignoreCase : false, want : "\"}!\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 336, col : 11, offset : 8761}, expr : AllExpr.CharClassMatcher({ pos : { line : 336, col : 11, offset : 8761}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})]})}),AllExpr.ActionExpr({ pos : { line : 257, col : 18, offset : 6206}, run : NovelPeg__calloninput246, expr : AllExpr.LabeledExpr({ pos : { line : 257, col : 18, offset : 6206}, label : "text", expr : AllExpr.ActionExpr({ pos : { line : 256, col : 22, offset : 6125}, run : NovelPeg__calloninput248, expr : AllExpr.OneOrMoreExpr({ pos : { line : 256, col : 22, offset : 6125}, expr : AllExpr.SeqExpr({ pos : { line : 256, col : 24, offset : 6127}, exprs : [AllExpr.NotExpr({ pos : { line : 256, col : 24, offset : 6127}, expr : AllExpr.CharClassMatcher({ pos : { line : 256, col : 25, offset : 6128}, val : "[:@]", chars : [HxOverrides.cca(":",0),HxOverrides.cca("@",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 256, col : 30, offset : 6133}, expr : AllExpr.CharClassMatcher({ pos : { line : 256, col : 30, offset : 6133}, val : "[^\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})]})})})})})]})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})})})]})}),AllExpr.ActionExpr({ pos : { line : 186, col : 14, offset : 4208}, run : NovelPeg__calloninput258, expr : AllExpr.SeqExpr({ pos : { line : 186, col : 14, offset : 4208}, exprs : [AllExpr.LitMatcher({ pos : { line : 186, col : 14, offset : 4208}, val : ":", ignoreCase : false, want : "\":\""}),AllExpr.LabeledExpr({ pos : { line : 186, col : 18, offset : 4212}, label : "name", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 186, col : 23, offset : 4217}, expr : AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput263, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 336, col : 11, offset : 8761}, expr : AllExpr.CharClassMatcher({ pos : { line : 336, col : 11, offset : 8761}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.LabeledExpr({ pos : { line : 186, col : 45, offset : 4239}, label : "lines", expr : AllExpr.ActionExpr({ pos : { line : 215, col : 14, offset : 5003}, run : NovelPeg__calloninput272, expr : AllExpr.SeqExpr({ pos : { line : 215, col : 14, offset : 5003}, exprs : [AllExpr.LabeledExpr({ pos : { line : 215, col : 14, offset : 5003}, label : "lines", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 215, col : 20, offset : 5009}, expr : AllExpr.ChoiceExpr({ pos : { line : 217, col : 13, offset : 5069}, alternatives : [AllExpr.ActionExpr({ pos : { line : 219, col : 24, offset : 5163}, run : NovelPeg__calloninput277, expr : AllExpr.SeqExpr({ pos : { line : 219, col : 24, offset : 5163}, exprs : [AllExpr.LitMatcher({ pos : { line : 219, col : 24, offset : 5163}, val : "@#", ignoreCase : false, want : "\"@#\""}),AllExpr.OneOrMoreExpr({ pos : { line : 219, col : 32, offset : 5171}, expr : AllExpr.SeqExpr({ pos : { line : 219, col : 33, offset : 5172}, exprs : [AllExpr.NotExpr({ pos : { line : 219, col : 33, offset : 5172}, expr : AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 219, col : 37, offset : 5176})]})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 221, col : 18, offset : 5236}, run : NovelPeg__calloninput288, expr : AllExpr.SeqExpr({ pos : { line : 221, col : 18, offset : 5236}, exprs : [AllExpr.LitMatcher({ pos : { line : 221, col : 18, offset : 5236}, val : "@", ignoreCase : false, want : "\"@\""}),AllExpr.LabeledExpr({ pos : { line : 221, col : 22, offset : 5240}, label : "name", expr : AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput292, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})}),AllExpr.LabeledExpr({ pos : { line : 221, col : 38, offset : 5256}, label : "params", expr : AllExpr.ChoiceExpr({ pos : { line : 282, col : 15, offset : 6890}, alternatives : [AllExpr.ActionExpr({ pos : { line : 282, col : 15, offset : 6890}, run : NovelPeg__calloninput299, expr : AllExpr.SeqExpr({ pos : { line : 282, col : 15, offset : 6890}, exprs : [AllExpr.LitMatcher({ pos : { line : 282, col : 15, offset : 6890}, val : "(", ignoreCase : false, want : "\"(\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 282, col : 22, offset : 6897}, val : ")", ignoreCase : false, want : "\")\""})]})}),AllExpr.ActionExpr({ pos : { line : 283, col : 15, offset : 7023}, run : NovelPeg__calloninput305, expr : AllExpr.SeqExpr({ pos : { line : 283, col : 15, offset : 7023}, exprs : [AllExpr.LitMatcher({ pos : { line : 283, col : 15, offset : 7023}, val : "(", ignoreCase : false, want : "\"(\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 283, col : 22, offset : 7030}, label : "first", expr : AllExpr.ActionExpr({ pos : { line : 288, col : 13, offset : 7288}, run : NovelPeg__calloninput311, expr : AllExpr.ChoiceExpr({ pos : { line : 290, col : 14, offset : 7354}, alternatives : [AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput313, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 316, col : 12, offset : 8242}, run : NovelPeg__calloninput318, expr : AllExpr.SeqExpr({ pos : { line : 316, col : 12, offset : 8242}, exprs : [AllExpr.ZeroOrOneExpr({ pos : { line : 316, col : 12, offset : 8242}, expr : AllExpr.LitMatcher({ pos : { line : 316, col : 12, offset : 8242}, val : "-", ignoreCase : false, want : "\"-\""})}),AllExpr.OneOrMoreExpr({ pos : { line : 316, col : 17, offset : 8247}, expr : AllExpr.CharClassMatcher({ pos : { line : 316, col : 17, offset : 8247}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]})}),AllExpr.SeqExpr({ pos : { line : 292, col : 14, offset : 7401}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 292, col : 14, offset : 7401}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 14, offset : 7401}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 292, col : 21, offset : 7408}, val : ".", ignoreCase : false, want : "\".\""}),AllExpr.OneOrMoreExpr({ pos : { line : 292, col : 25, offset : 7412}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 25, offset : 7412}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]}),AllExpr.ActionExpr({ pos : { line : 295, col : 15, offset : 7461}, run : NovelPeg__calloninput330, expr : AllExpr.ChoiceExpr({ pos : { line : 295, col : 16, offset : 7462}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 14, offset : 7548}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 14, offset : 7548}, val : "\"", ignoreCase : false, want : "\"\\\"\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 297, col : 18, offset : 7552}, expr : AllExpr.ChoiceExpr({ pos : { line : 297, col : 20, offset : 7554}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 20, offset : 7554}, exprs : [AllExpr.NotExpr({ pos : { line : 297, col : 20, offset : 7554}, expr : AllExpr.CharClassMatcher({ pos : { line : 308, col : 15, offset : 7988}, val : "[\"\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 297, col : 33, offset : 7567})]}),AllExpr.SeqExpr({ pos : { line : 297, col : 37, offset : 7571}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 37, offset : 7571}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 309, col : 18, offset : 8023}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 310, col : 20, offset : 8078}, val : "[\"\\\\/bfnrt]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 297, col : 60, offset : 7594}, val : "\"", ignoreCase : false, want : "\"\\\"\""})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 14, offset : 7612}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 14, offset : 7612}, val : "'", ignoreCase : false, want : "\"'\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 298, col : 19, offset : 7617}, expr : AllExpr.ChoiceExpr({ pos : { line : 298, col : 21, offset : 7619}, alternatives : [AllExpr.SeqExpr({ pos : { line : 298, col : 21, offset : 7619}, exprs : [AllExpr.NotExpr({ pos : { line : 298, col : 21, offset : 7619}, expr : AllExpr.CharClassMatcher({ pos : { line : 300, col : 16, offset : 7686}, val : "[\\\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 298, col : 35, offset : 7633})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 39, offset : 7637}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 39, offset : 7637}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 301, col : 19, offset : 7722}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 302, col : 21, offset : 7779}, val : "[\\\\\\/bfnrt]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 298, col : 63, offset : 7661}, val : "'", ignoreCase : false, want : "\"'\""})]}),AllExpr.SeqExpr({ pos : { line : 295, col : 29, offset : 7475}, exprs : [AllExpr.LitMatcher({ pos : { line : 295, col : 29, offset : 7475}, val : "`", ignoreCase : false, want : "\"`\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 295, col : 33, offset : 7479}, expr : AllExpr.CharClassMatcher({ pos : { line : 295, col : 33, offset : 7479}, val : "[^`]", chars : [HxOverrides.cca("`",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.LitMatcher({ pos : { line : 295, col : 39, offset : 7485}, val : "`", ignoreCase : false, want : "\"`\""})]})]})})]})})}),AllExpr.LabeledExpr({ pos : { line : 283, col : 37, offset : 7045}, label : "rest", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 283, col : 43, offset : 7051}, expr : AllExpr.ActionExpr({ pos : { line : 285, col : 26, offset : 7159}, run : NovelPeg__calloninput377, expr : AllExpr.SeqExpr({ pos : { line : 285, col : 26, offset : 7159}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 285, col : 29, offset : 7162}, val : ",", ignoreCase : false, want : "\",\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 285, col : 36, offset : 7169}, label : "e", expr : AllExpr.ActionExpr({ pos : { line : 288, col : 13, offset : 7288}, run : NovelPeg__calloninput385, expr : AllExpr.ChoiceExpr({ pos : { line : 290, col : 14, offset : 7354}, alternatives : [AllExpr.ActionExpr({ pos : { line : 324, col : 15, offset : 8415}, run : NovelPeg__calloninput387, expr : AllExpr.SeqExpr({ pos : { line : 324, col : 15, offset : 8415}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 329, col : 13, offset : 8521}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 324, col : 24, offset : 8424}, expr : AllExpr.CharClassMatcher({ pos : { line : 332, col : 16, offset : 8638}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 316, col : 12, offset : 8242}, run : NovelPeg__calloninput392, expr : AllExpr.SeqExpr({ pos : { line : 316, col : 12, offset : 8242}, exprs : [AllExpr.ZeroOrOneExpr({ pos : { line : 316, col : 12, offset : 8242}, expr : AllExpr.LitMatcher({ pos : { line : 316, col : 12, offset : 8242}, val : "-", ignoreCase : false, want : "\"-\""})}),AllExpr.OneOrMoreExpr({ pos : { line : 316, col : 17, offset : 8247}, expr : AllExpr.CharClassMatcher({ pos : { line : 316, col : 17, offset : 8247}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]})}),AllExpr.SeqExpr({ pos : { line : 292, col : 14, offset : 7401}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 292, col : 14, offset : 7401}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 14, offset : 7401}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})}),AllExpr.LitMatcher({ pos : { line : 292, col : 21, offset : 7408}, val : ".", ignoreCase : false, want : "\".\""}),AllExpr.OneOrMoreExpr({ pos : { line : 292, col : 25, offset : 7412}, expr : AllExpr.CharClassMatcher({ pos : { line : 292, col : 25, offset : 7412}, val : "[0-9]", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0)], ignoreCase : false, inverted : false})})]}),AllExpr.ActionExpr({ pos : { line : 295, col : 15, offset : 7461}, run : NovelPeg__calloninput404, expr : AllExpr.ChoiceExpr({ pos : { line : 295, col : 16, offset : 7462}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 14, offset : 7548}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 14, offset : 7548}, val : "\"", ignoreCase : false, want : "\"\\\"\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 297, col : 18, offset : 7552}, expr : AllExpr.ChoiceExpr({ pos : { line : 297, col : 20, offset : 7554}, alternatives : [AllExpr.SeqExpr({ pos : { line : 297, col : 20, offset : 7554}, exprs : [AllExpr.NotExpr({ pos : { line : 297, col : 20, offset : 7554}, expr : AllExpr.CharClassMatcher({ pos : { line : 308, col : 15, offset : 7988}, val : "[\"\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 297, col : 33, offset : 7567})]}),AllExpr.SeqExpr({ pos : { line : 297, col : 37, offset : 7571}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 37, offset : 7571}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 309, col : 18, offset : 8023}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 310, col : 20, offset : 8078}, val : "[\"\\\\/bfnrt]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 297, col : 60, offset : 7594}, val : "\"", ignoreCase : false, want : "\"\\\"\""})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 14, offset : 7612}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 14, offset : 7612}, val : "'", ignoreCase : false, want : "\"'\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 298, col : 19, offset : 7617}, expr : AllExpr.ChoiceExpr({ pos : { line : 298, col : 21, offset : 7619}, alternatives : [AllExpr.SeqExpr({ pos : { line : 298, col : 21, offset : 7619}, exprs : [AllExpr.NotExpr({ pos : { line : 298, col : 21, offset : 7619}, expr : AllExpr.CharClassMatcher({ pos : { line : 300, col : 16, offset : 7686}, val : "[\\\\\\\\x00-\\x1f]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0)], ranges : [HxOverrides.cca("\x00",0),HxOverrides.cca("\x1F",0)], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 298, col : 35, offset : 7633})]}),AllExpr.SeqExpr({ pos : { line : 298, col : 39, offset : 7637}, exprs : [AllExpr.LitMatcher({ pos : { line : 298, col : 39, offset : 7637}, val : "\\", ignoreCase : false, want : "\"\\\\\""}),AllExpr.ChoiceExpr({ pos : { line : 301, col : 19, offset : 7722}, alternatives : [AllExpr.CharClassMatcher({ pos : { line : 302, col : 21, offset : 7779}, val : "[\\\\\\/bfnrt]", chars : [HxOverrides.cca("'",0),HxOverrides.cca("\\",0),HxOverrides.cca("/",0),HxOverrides.cca("b",0),HxOverrides.cca("f",0),HxOverrides.cca("n",0),HxOverrides.cca("r",0),HxOverrides.cca("t",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.SeqExpr({ pos : { line : 311, col : 17, offset : 8109}, exprs : [AllExpr.LitMatcher({ pos : { line : 311, col : 17, offset : 8109}, val : "u", ignoreCase : false, want : "\"u\""}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false}),AllExpr.CharClassMatcher({ pos : { line : 314, col : 12, offset : 8218}, val : "[0-9a-f]i", chars : [], ranges : [HxOverrides.cca("0",0),HxOverrides.cca("9",0),HxOverrides.cca("a",0),HxOverrides.cca("f",0)], ignoreCase : true, inverted : false})]})]})]})]})}),AllExpr.LitMatcher({ pos : { line : 298, col : 63, offset : 7661}, val : "'", ignoreCase : false, want : "\"'\""})]}),AllExpr.SeqExpr({ pos : { line : 295, col : 29, offset : 7475}, exprs : [AllExpr.LitMatcher({ pos : { line : 295, col : 29, offset : 7475}, val : "`", ignoreCase : false, want : "\"`\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 295, col : 33, offset : 7479}, expr : AllExpr.CharClassMatcher({ pos : { line : 295, col : 33, offset : 7479}, val : "[^`]", chars : [HxOverrides.cca("`",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.LitMatcher({ pos : { line : 295, col : 39, offset : 7485}, val : "`", ignoreCase : false, want : "\"`\""})]})]})})]})})})]})})})}),AllExpr.LitMatcher({ pos : { line : 283, col : 67, offset : 7075}, val : ")", ignoreCase : false, want : "\")\""})]})})]})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})}),AllExpr.ActionExpr({ pos : { line : 240, col : 18, offset : 5708}, run : NovelPeg__calloninput452, expr : AllExpr.SeqExpr({ pos : { line : 240, col : 18, offset : 5708}, exprs : [AllExpr.LitMatcher({ pos : { line : 240, col : 18, offset : 5708}, val : "@{", ignoreCase : false, want : "\"@{\""}),AllExpr.LabeledExpr({ pos : { line : 240, col : 23, offset : 5713}, label : "code", expr : AllExpr.ActionExpr({ pos : { line : 280, col : 24, offset : 6808}, run : NovelPeg__calloninput456, expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 280, col : 26, offset : 6810}, expr : AllExpr.SeqExpr({ pos : { line : 280, col : 28, offset : 6812}, exprs : [AllExpr.NotExpr({ pos : { line : 280, col : 28, offset : 6812}, expr : AllExpr.LitMatcher({ pos : { line : 280, col : 29, offset : 6813}, val : "}!", ignoreCase : false, want : "\"}!\""})}),AllExpr.AnyMatcher({ line : 280, col : 34, offset : 6818})]})})})}),AllExpr.LitMatcher({ pos : { line : 240, col : 48, offset : 5738}, val : "}!", ignoreCase : false, want : "\"}!\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 336, col : 11, offset : 8761}, expr : AllExpr.CharClassMatcher({ pos : { line : 336, col : 11, offset : 8761}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})]})}),AllExpr.ActionExpr({ pos : { line : 257, col : 18, offset : 6206}, run : NovelPeg__calloninput466, expr : AllExpr.LabeledExpr({ pos : { line : 257, col : 18, offset : 6206}, label : "text", expr : AllExpr.ActionExpr({ pos : { line : 256, col : 22, offset : 6125}, run : NovelPeg__calloninput468, expr : AllExpr.OneOrMoreExpr({ pos : { line : 256, col : 22, offset : 6125}, expr : AllExpr.SeqExpr({ pos : { line : 256, col : 24, offset : 6127}, exprs : [AllExpr.NotExpr({ pos : { line : 256, col : 24, offset : 6127}, expr : AllExpr.CharClassMatcher({ pos : { line : 256, col : 25, offset : 6128}, val : "[:@]", chars : [HxOverrides.cca(":",0),HxOverrides.cca("@",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 256, col : 30, offset : 6133}, expr : AllExpr.CharClassMatcher({ pos : { line : 256, col : 30, offset : 6133}, val : "[^\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.CharClassMatcher({ pos : { line : 338, col : 7, offset : 8777}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})]})})})})})]})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 334, col : 20, offset : 8737}, expr : AllExpr.CharClassMatcher({ pos : { line : 334, col : 20, offset : 8737}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})})})]})})]})})})})}),AllExpr.NotExpr({ pos : { line : 127, col : 21, offset : 2569}, expr : AllExpr.AnyMatcher({ line : 127, col : 22, offset : 2570})})]})})}]};
+var NovelPeg_g = { rules : [{ name : "input", pos : { line : 188, col : 1, offset : 4188}, expr : AllExpr.ActionExpr({ pos : { line : 188, col : 10, offset : 4197}, run : NovelPeg__calloninput1, expr : AllExpr.SeqExpr({ pos : { line : 188, col : 10, offset : 4197}, exprs : [AllExpr.ZeroOrMoreExpr({ pos : { line : 406, col : 20, offset : 10846}, expr : AllExpr.CharClassMatcher({ pos : { line : 406, col : 20, offset : 10846}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 188, col : 13, offset : 4200}, label : "x", expr : AllExpr.RuleRefExpr({ pos : { line : 188, col : 15, offset : 4202}, name : "nodes"})}),AllExpr.NotExpr({ pos : { line : 188, col : 21, offset : 4208}, expr : AllExpr.AnyMatcher({ line : 188, col : 22, offset : 4209})})]})})},{ name : "nodes", pos : { line : 192, col : 1, offset : 4248}, expr : AllExpr.ActionExpr({ pos : { line : 192, col : 10, offset : 4257}, run : NovelPeg__callonnodes1, expr : AllExpr.LabeledExpr({ pos : { line : 192, col : 10, offset : 4257}, label : "nodes", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 192, col : 17, offset : 4264}, expr : AllExpr.RuleRefExpr({ pos : { line : 192, col : 17, offset : 4264}, name : "node"})})})})},{ name : "_nodeCond", pos : { line : 206, col : 1, offset : 4573}, expr : AllExpr.ActionExpr({ pos : { line : 206, col : 14, offset : 4586}, run : NovelPeg__callon_nodeCond1, expr : AllExpr.SeqExpr({ pos : { line : 206, col : 14, offset : 4586}, exprs : [AllExpr.LitMatcher({ pos : { line : 206, col : 14, offset : 4586}, val : "[", ignoreCase : false, want : "\"[\""}),AllExpr.LabeledExpr({ pos : { line : 206, col : 18, offset : 4590}, label : "cond", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 206, col : 23, offset : 4595}, expr : AllExpr.RuleRefExpr({ pos : { line : 206, col : 23, offset : 4595}, name : "CodeExpr2"})})}),AllExpr.LitMatcher({ pos : { line : 206, col : 34, offset : 4606}, val : "]", ignoreCase : false, want : "\"]\""})]})})},{ name : "node", pos : { line : 209, col : 1, offset : 4713}, expr : AllExpr.ChoiceExpr({ pos : { line : 209, col : 9, offset : 4721}, alternatives : [AllExpr.RuleRefExpr({ pos : { line : 209, col : 9, offset : 4721}, name : "nodeType1"}),AllExpr.RuleRefExpr({ pos : { line : 209, col : 21, offset : 4733}, name : "nodeType2"})]})},{ name : "nodeType1", pos : { line : 211, col : 1, offset : 4746}, expr : AllExpr.ActionExpr({ pos : { line : 211, col : 14, offset : 4759}, run : NovelPeg__callonnodeType11, expr : AllExpr.SeqExpr({ pos : { line : 211, col : 14, offset : 4759}, exprs : [AllExpr.LitMatcher({ pos : { line : 211, col : 14, offset : 4759}, val : ":", ignoreCase : false, want : "\":\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 408, col : 11, offset : 10870}, expr : AllExpr.CharClassMatcher({ pos : { line : 408, col : 11, offset : 10870}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 211, col : 25, offset : 4770}, label : "name", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 211, col : 30, offset : 4775}, expr : AllExpr.ActionExpr({ pos : { line : 396, col : 15, offset : 10524}, run : NovelPeg__callonnodeType18, expr : AllExpr.SeqExpr({ pos : { line : 396, col : 15, offset : 10524}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 401, col : 13, offset : 10630}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 396, col : 24, offset : 10533}, expr : AllExpr.CharClassMatcher({ pos : { line : 404, col : 16, offset : 10747}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 408, col : 11, offset : 10870}, expr : AllExpr.CharClassMatcher({ pos : { line : 408, col : 11, offset : 10870}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 211, col : 50, offset : 4795}, label : "cond", expr : AllExpr.RuleRefExpr({ pos : { line : 211, col : 55, offset : 4800}, name : "_nodeCond"})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 408, col : 11, offset : 10870}, expr : AllExpr.CharClassMatcher({ pos : { line : 408, col : 11, offset : 10870}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 211, col : 72, offset : 4817}, label : "next", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 211, col : 77, offset : 4822}, expr : AllExpr.ActionExpr({ pos : { line : 207, col : 14, offset : 4655}, run : NovelPeg__callonnodeType121, expr : AllExpr.SeqExpr({ pos : { line : 207, col : 14, offset : 4655}, exprs : [AllExpr.LitMatcher({ pos : { line : 207, col : 14, offset : 4655}, val : "[", ignoreCase : false, want : "\"[\""}),AllExpr.LabeledExpr({ pos : { line : 207, col : 18, offset : 4659}, label : "name", expr : AllExpr.ActionExpr({ pos : { line : 396, col : 15, offset : 10524}, run : NovelPeg__callonnodeType125, expr : AllExpr.SeqExpr({ pos : { line : 396, col : 15, offset : 10524}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 401, col : 13, offset : 10630}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 396, col : 24, offset : 10533}, expr : AllExpr.CharClassMatcher({ pos : { line : 404, col : 16, offset : 10747}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})}),AllExpr.LitMatcher({ pos : { line : 207, col : 34, offset : 4675}, val : "]", ignoreCase : false, want : "\"]\""})]})})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 408, col : 11, offset : 10870}, expr : AllExpr.CharClassMatcher({ pos : { line : 408, col : 11, offset : 10870}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.ZeroOrOneExpr({ pos : { line : 411, col : 8, offset : 10901}, expr : AllExpr.LitMatcher({ pos : { line : 411, col : 8, offset : 10901}, val : "\r", ignoreCase : false, want : "\"\\r\""})}),AllExpr.LitMatcher({ pos : { line : 411, col : 14, offset : 10907}, val : "\n", ignoreCase : false, want : "\"\\n\""}),AllExpr.LabeledExpr({ pos : { line : 211, col : 100, offset : 4845}, label : "lines", expr : AllExpr.RuleRefExpr({ pos : { line : 211, col : 106, offset : 4851}, name : "nodeLines"})})]})})},{ name : "nodeType2", pos : { line : 246, col : 1, offset : 5760}, expr : AllExpr.ActionExpr({ pos : { line : 246, col : 14, offset : 5773}, run : NovelPeg__callonnodeType21, expr : AllExpr.SeqExpr({ pos : { line : 246, col : 14, offset : 5773}, exprs : [AllExpr.LitMatcher({ pos : { line : 246, col : 14, offset : 5773}, val : ":", ignoreCase : false, want : "\":\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 408, col : 11, offset : 10870}, expr : AllExpr.CharClassMatcher({ pos : { line : 408, col : 11, offset : 10870}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 246, col : 25, offset : 5784}, label : "name", expr : AllExpr.ZeroOrOneExpr({ pos : { line : 246, col : 30, offset : 5789}, expr : AllExpr.ActionExpr({ pos : { line : 396, col : 15, offset : 10524}, run : NovelPeg__callonnodeType28, expr : AllExpr.SeqExpr({ pos : { line : 396, col : 15, offset : 10524}, exprs : [AllExpr.CharClassMatcher({ pos : { line : 401, col : 13, offset : 10630}, val : "[_\\pL\\pOther_ID_Start]", chars : [HxOverrides.cca("_",0)], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 396, col : 24, offset : 10533}, expr : AllExpr.CharClassMatcher({ pos : { line : 404, col : 16, offset : 10747}, val : "[\\pL\\pOther_ID_Start\\pNl\\pMn\\pMc\\pNd\\pPc\\pOther_ID_Continue]", chars : [], ranges : [], classes : [Unicode_L,Unicode_Other_ID_Start,Unicode_Nl,Unicode_Mn,Unicode_Mc,Unicode_Nd,Unicode_Pc,Unicode_Other_ID_Continue], ignoreCase : false, inverted : false})})]})})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 408, col : 11, offset : 10870}, expr : AllExpr.CharClassMatcher({ pos : { line : 408, col : 11, offset : 10870}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.ZeroOrOneExpr({ pos : { line : 411, col : 8, offset : 10901}, expr : AllExpr.LitMatcher({ pos : { line : 411, col : 8, offset : 10901}, val : "\r", ignoreCase : false, want : "\"\\r\""})}),AllExpr.LitMatcher({ pos : { line : 411, col : 14, offset : 10907}, val : "\n", ignoreCase : false, want : "\"\\n\""}),AllExpr.LabeledExpr({ pos : { line : 246, col : 53, offset : 5812}, label : "lines", expr : AllExpr.RuleRefExpr({ pos : { line : 246, col : 59, offset : 5818}, name : "nodeLines"})})]})})},{ name : "nodeLines", pos : { line : 275, col : 1, offset : 6563}, expr : AllExpr.ActionExpr({ pos : { line : 275, col : 14, offset : 6576}, run : NovelPeg__callonnodeLines1, expr : AllExpr.SeqExpr({ pos : { line : 275, col : 14, offset : 6576}, exprs : [AllExpr.LabeledExpr({ pos : { line : 275, col : 14, offset : 6576}, label : "lines", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 275, col : 20, offset : 6582}, expr : AllExpr.RuleRefExpr({ pos : { line : 275, col : 20, offset : 6582}, name : "nodeLine"})})}),AllExpr.ZeroOrMoreExpr({ pos : { line : 406, col : 20, offset : 10846}, expr : AllExpr.CharClassMatcher({ pos : { line : 406, col : 20, offset : 10846}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})})},{ name : "nodeLine", pos : { line : 277, col : 1, offset : 6630}, expr : AllExpr.ChoiceExpr({ pos : { line : 277, col : 13, offset : 6642}, alternatives : [AllExpr.ActionExpr({ pos : { line : 279, col : 24, offset : 6725}, run : NovelPeg__callonnodeLine2, expr : AllExpr.SeqExpr({ pos : { line : 279, col : 24, offset : 6725}, exprs : [AllExpr.LitMatcher({ pos : { line : 279, col : 24, offset : 6725}, val : "@#", ignoreCase : false, want : "\"@#\""}),AllExpr.OneOrMoreExpr({ pos : { line : 279, col : 32, offset : 6733}, expr : AllExpr.SeqExpr({ pos : { line : 279, col : 33, offset : 6734}, exprs : [AllExpr.NotExpr({ pos : { line : 279, col : 33, offset : 6734}, expr : AllExpr.CharClassMatcher({ pos : { line : 410, col : 7, offset : 10886}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 279, col : 37, offset : 6738})]})}),AllExpr.CharClassMatcher({ pos : { line : 410, col : 7, offset : 10886}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false}),AllExpr.ZeroOrMoreExpr({ pos : { line : 406, col : 20, offset : 10846}, expr : AllExpr.CharClassMatcher({ pos : { line : 406, col : 20, offset : 10846}, val : "[ \\n\\t\\r]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\n",0),HxOverrides.cca("\t",0),HxOverrides.cca("\r",0)], ranges : [], ignoreCase : false, inverted : false})})]})}),AllExpr.RuleRefExpr({ pos : { line : 277, col : 35, offset : 6664}, name : "nodeLineType2"}),AllExpr.RuleRefExpr({ pos : { line : 277, col : 51, offset : 6680}, name : "nodeLineCommonText"})]})},{ name : "nodeLineType2", pos : { line : 297, col : 1, offset : 7307}, expr : AllExpr.ActionExpr({ pos : { line : 297, col : 18, offset : 7324}, run : NovelPeg__callonnodeLineType21, expr : AllExpr.SeqExpr({ pos : { line : 297, col : 18, offset : 7324}, exprs : [AllExpr.LitMatcher({ pos : { line : 297, col : 18, offset : 7324}, val : "@{", ignoreCase : false, want : "\"@{\""}),AllExpr.LabeledExpr({ pos : { line : 297, col : 23, offset : 7329}, label : "code", expr : AllExpr.RuleRefExpr({ pos : { line : 297, col : 28, offset : 7334}, name : "Code"})}),AllExpr.ChoiceExpr({ pos : { line : 297, col : 34, offset : 7340}, alternatives : [AllExpr.LitMatcher({ pos : { line : 297, col : 34, offset : 7340}, val : "}!", ignoreCase : false, want : "\"}!\""}),AllExpr.LitMatcher({ pos : { line : 297, col : 41, offset : 7347}, val : "}", ignoreCase : false, want : "\"}\""})]}),AllExpr.ZeroOrMoreExpr({ pos : { line : 408, col : 11, offset : 10870}, expr : AllExpr.CharClassMatcher({ pos : { line : 408, col : 11, offset : 10870}, val : "[ \\t]", chars : [HxOverrides.cca(" ",0),HxOverrides.cca("\t",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.ZeroOrOneExpr({ pos : { line : 411, col : 8, offset : 10901}, expr : AllExpr.LitMatcher({ pos : { line : 411, col : 8, offset : 10901}, val : "\r", ignoreCase : false, want : "\"\\r\""})}),AllExpr.LitMatcher({ pos : { line : 411, col : 14, offset : 10907}, val : "\n", ignoreCase : false, want : "\"\\n\""})]})})},{ name : "nodeLineExprBlock", pos : { line : 328, col : 1, offset : 8198}, expr : AllExpr.ActionExpr({ pos : { line : 328, col : 22, offset : 8219}, run : NovelPeg__callonnodeLineExprBlock1, expr : AllExpr.SeqExpr({ pos : { line : 328, col : 22, offset : 8219}, exprs : [AllExpr.LitMatcher({ pos : { line : 328, col : 22, offset : 8219}, val : "{", ignoreCase : false, want : "\"{\""}),AllExpr.LabeledExpr({ pos : { line : 328, col : 26, offset : 8223}, label : "expr", expr : AllExpr.RuleRefExpr({ pos : { line : 328, col : 31, offset : 8228}, name : "CodeExpr"})}),AllExpr.LitMatcher({ pos : { line : 328, col : 40, offset : 8237}, val : "}", ignoreCase : false, want : "\"}\""})]})})},{ name : "nodeLineCommonText", pos : { line : 337, col : 1, offset : 8502}, expr : AllExpr.ActionExpr({ pos : { line : 337, col : 23, offset : 8524}, run : NovelPeg__callonnodeLineCommonText1, expr : AllExpr.SeqExpr({ pos : { line : 337, col : 23, offset : 8524}, exprs : [AllExpr.NotExpr({ pos : { line : 337, col : 23, offset : 8524}, expr : AllExpr.CharClassMatcher({ pos : { line : 337, col : 24, offset : 8525}, val : "[:@]", chars : [HxOverrides.cca(":",0),HxOverrides.cca("@",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.LabeledExpr({ pos : { line : 337, col : 29, offset : 8530}, label : "items", expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 337, col : 36, offset : 8537}, expr : AllExpr.ChoiceExpr({ pos : { line : 337, col : 38, offset : 8539}, alternatives : [AllExpr.ActionExpr({ pos : { line : 307, col : 17, offset : 7682}, run : NovelPeg__callonnodeLineCommonText8, expr : AllExpr.LabeledExpr({ pos : { line : 307, col : 17, offset : 7682}, label : "items", expr : AllExpr.OneOrMoreExpr({ pos : { line : 307, col : 24, offset : 7689}, expr : AllExpr.ChoiceExpr({ pos : { line : 307, col : 25, offset : 7690}, alternatives : [AllExpr.ActionExpr({ pos : { line : 305, col : 15, offset : 7567}, run : NovelPeg__callonnodeLineCommonText12, expr : AllExpr.LitMatcher({ pos : { line : 305, col : 15, offset : 7567}, val : "\\{", ignoreCase : false, want : "\"\\\\{\""})}),AllExpr.ActionExpr({ pos : { line : 306, col : 13, offset : 7616}, run : NovelPeg__callonnodeLineCommonText14, expr : AllExpr.CharClassMatcher({ pos : { line : 306, col : 13, offset : 7616}, val : "[^\\r\\n{]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0),HxOverrides.cca("{",0)], ranges : [], ignoreCase : false, inverted : true})})]})})})}),AllExpr.RuleRefExpr({ pos : { line : 337, col : 53, offset : 8554}, name : "nodeLineExprBlock"})]})})}),AllExpr.ZeroOrOneExpr({ pos : { line : 411, col : 8, offset : 10901}, expr : AllExpr.LitMatcher({ pos : { line : 411, col : 8, offset : 10901}, val : "\r", ignoreCase : false, want : "\"\\r\""})}),AllExpr.LitMatcher({ pos : { line : 411, col : 14, offset : 10907}, val : "\n", ignoreCase : false, want : "\"\\n\""})]})})},{ name : "Code", pos : { line : 425, col : 1, offset : 11395}, expr : AllExpr.ActionExpr({ pos : { line : 425, col : 9, offset : 11403}, run : NovelPeg__callonCode1, expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 425, col : 9, offset : 11403}, expr : AllExpr.ChoiceExpr({ pos : { line : 425, col : 11, offset : 11405}, alternatives : [AllExpr.OneOrMoreExpr({ pos : { line : 425, col : 11, offset : 11405}, expr : AllExpr.ChoiceExpr({ pos : { line : 425, col : 13, offset : 11407}, alternatives : [AllExpr.SeqExpr({ pos : { line : 416, col : 21, offset : 11073}, exprs : [AllExpr.LitMatcher({ pos : { line : 416, col : 21, offset : 11073}, val : "/*", ignoreCase : false, want : "\"/*\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 416, col : 26, offset : 11078}, expr : AllExpr.SeqExpr({ pos : { line : 416, col : 28, offset : 11080}, exprs : [AllExpr.NotExpr({ pos : { line : 416, col : 28, offset : 11080}, expr : AllExpr.LitMatcher({ pos : { line : 416, col : 29, offset : 11081}, val : "*/", ignoreCase : false, want : "\"*/\""})}),AllExpr.AnyMatcher({ line : 414, col : 15, offset : 11001})]})}),AllExpr.LitMatcher({ pos : { line : 416, col : 48, offset : 11100}, val : "*/", ignoreCase : false, want : "\"*/\""})]}),AllExpr.SeqExpr({ pos : { line : 418, col : 22, offset : 11205}, exprs : [AllExpr.NotExpr({ pos : { line : 418, col : 22, offset : 11205}, expr : AllExpr.LitMatcher({ pos : { line : 418, col : 24, offset : 11207}, val : "//{", ignoreCase : false, want : "\"//{\""})}),AllExpr.LitMatcher({ pos : { line : 418, col : 31, offset : 11214}, val : "//", ignoreCase : false, want : "\"//\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 418, col : 36, offset : 11219}, expr : AllExpr.SeqExpr({ pos : { line : 418, col : 38, offset : 11221}, exprs : [AllExpr.NotExpr({ pos : { line : 418, col : 38, offset : 11221}, expr : AllExpr.CharClassMatcher({ pos : { line : 410, col : 7, offset : 10886}, val : "[\\r\\n]", chars : [HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 414, col : 15, offset : 11001})]})})]}),AllExpr.SeqExpr({ pos : { line : 420, col : 22, offset : 11263}, exprs : [AllExpr.LitMatcher({ pos : { line : 420, col : 22, offset : 11263}, val : "\"", ignoreCase : false, want : "\"\\\"\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 420, col : 26, offset : 11267}, expr : AllExpr.ChoiceExpr({ pos : { line : 420, col : 27, offset : 11268}, alternatives : [AllExpr.LitMatcher({ pos : { line : 420, col : 27, offset : 11268}, val : "\\\"", ignoreCase : false, want : "\"\\\\\\\"\""}),AllExpr.LitMatcher({ pos : { line : 420, col : 34, offset : 11275}, val : "\\\\", ignoreCase : false, want : "\"\\\\\\\\\""}),AllExpr.CharClassMatcher({ pos : { line : 420, col : 41, offset : 11282}, val : "[^\"\\r\\n]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : true})]})}),AllExpr.LitMatcher({ pos : { line : 420, col : 52, offset : 11293}, val : "\"", ignoreCase : false, want : "\"\\\"\""})]}),AllExpr.SeqExpr({ pos : { line : 421, col : 21, offset : 11320}, exprs : [AllExpr.LitMatcher({ pos : { line : 421, col : 21, offset : 11320}, val : "`", ignoreCase : false, want : "\"`\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 421, col : 25, offset : 11324}, expr : AllExpr.CharClassMatcher({ pos : { line : 421, col : 25, offset : 11324}, val : "[^`]", chars : [HxOverrides.cca("`",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.LitMatcher({ pos : { line : 421, col : 31, offset : 11330}, val : "`", ignoreCase : false, want : "\"`\""})]}),AllExpr.SeqExpr({ pos : { line : 422, col : 21, offset : 11357}, exprs : [AllExpr.LitMatcher({ pos : { line : 422, col : 21, offset : 11357}, val : "'", ignoreCase : false, want : "\"'\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 422, col : 26, offset : 11362}, expr : AllExpr.ChoiceExpr({ pos : { line : 422, col : 27, offset : 11363}, alternatives : [AllExpr.LitMatcher({ pos : { line : 422, col : 27, offset : 11363}, val : "\\'", ignoreCase : false, want : "\"\\\\'\""}),AllExpr.LitMatcher({ pos : { line : 422, col : 34, offset : 11370}, val : "\\\\", ignoreCase : false, want : "\"\\\\\\\\\""}),AllExpr.OneOrMoreExpr({ pos : { line : 422, col : 41, offset : 11377}, expr : AllExpr.CharClassMatcher({ pos : { line : 422, col : 41, offset : 11377}, val : "[^\\]", chars : [HxOverrides.cca("'",0)], ranges : [], ignoreCase : false, inverted : true})})]})}),AllExpr.LitMatcher({ pos : { line : 422, col : 49, offset : 11385}, val : "'", ignoreCase : false, want : "\"'\""})]}),AllExpr.SeqExpr({ pos : { line : 425, col : 43, offset : 11437}, exprs : [AllExpr.NotExpr({ pos : { line : 425, col : 43, offset : 11437}, expr : AllExpr.CharClassMatcher({ pos : { line : 425, col : 44, offset : 11438}, val : "[{}]", chars : [HxOverrides.cca("{",0),HxOverrides.cca("}",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 414, col : 15, offset : 11001})]})]})}),AllExpr.SeqExpr({ pos : { line : 425, col : 65, offset : 11459}, exprs : [AllExpr.LitMatcher({ pos : { line : 425, col : 65, offset : 11459}, val : "{", ignoreCase : false, want : "\"{\""}),AllExpr.RuleRefExpr({ pos : { line : 425, col : 69, offset : 11463}, name : "Code"}),AllExpr.LitMatcher({ pos : { line : 425, col : 74, offset : 11468}, val : "}", ignoreCase : false, want : "\"}\""})]})]})})})},{ name : "CodeExpr", pos : { line : 426, col : 1, offset : 11516}, expr : AllExpr.ActionExpr({ pos : { line : 426, col : 13, offset : 11528}, run : NovelPeg__callonCodeExpr1, expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 426, col : 13, offset : 11528}, expr : AllExpr.ChoiceExpr({ pos : { line : 426, col : 15, offset : 11530}, alternatives : [AllExpr.OneOrMoreExpr({ pos : { line : 426, col : 15, offset : 11530}, expr : AllExpr.ChoiceExpr({ pos : { line : 426, col : 16, offset : 11531}, alternatives : [AllExpr.SeqExpr({ pos : { line : 420, col : 22, offset : 11263}, exprs : [AllExpr.LitMatcher({ pos : { line : 420, col : 22, offset : 11263}, val : "\"", ignoreCase : false, want : "\"\\\"\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 420, col : 26, offset : 11267}, expr : AllExpr.ChoiceExpr({ pos : { line : 420, col : 27, offset : 11268}, alternatives : [AllExpr.LitMatcher({ pos : { line : 420, col : 27, offset : 11268}, val : "\\\"", ignoreCase : false, want : "\"\\\\\\\"\""}),AllExpr.LitMatcher({ pos : { line : 420, col : 34, offset : 11275}, val : "\\\\", ignoreCase : false, want : "\"\\\\\\\\\""}),AllExpr.CharClassMatcher({ pos : { line : 420, col : 41, offset : 11282}, val : "[^\"\\r\\n]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : true})]})}),AllExpr.LitMatcher({ pos : { line : 420, col : 52, offset : 11293}, val : "\"", ignoreCase : false, want : "\"\\\"\""})]}),AllExpr.SeqExpr({ pos : { line : 421, col : 21, offset : 11320}, exprs : [AllExpr.LitMatcher({ pos : { line : 421, col : 21, offset : 11320}, val : "`", ignoreCase : false, want : "\"`\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 421, col : 25, offset : 11324}, expr : AllExpr.CharClassMatcher({ pos : { line : 421, col : 25, offset : 11324}, val : "[^`]", chars : [HxOverrides.cca("`",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.LitMatcher({ pos : { line : 421, col : 31, offset : 11330}, val : "`", ignoreCase : false, want : "\"`\""})]}),AllExpr.SeqExpr({ pos : { line : 422, col : 21, offset : 11357}, exprs : [AllExpr.LitMatcher({ pos : { line : 422, col : 21, offset : 11357}, val : "'", ignoreCase : false, want : "\"'\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 422, col : 26, offset : 11362}, expr : AllExpr.ChoiceExpr({ pos : { line : 422, col : 27, offset : 11363}, alternatives : [AllExpr.LitMatcher({ pos : { line : 422, col : 27, offset : 11363}, val : "\\'", ignoreCase : false, want : "\"\\\\'\""}),AllExpr.LitMatcher({ pos : { line : 422, col : 34, offset : 11370}, val : "\\\\", ignoreCase : false, want : "\"\\\\\\\\\""}),AllExpr.OneOrMoreExpr({ pos : { line : 422, col : 41, offset : 11377}, expr : AllExpr.CharClassMatcher({ pos : { line : 422, col : 41, offset : 11377}, val : "[^\\]", chars : [HxOverrides.cca("'",0)], ranges : [], ignoreCase : false, inverted : true})})]})}),AllExpr.LitMatcher({ pos : { line : 422, col : 49, offset : 11385}, val : "'", ignoreCase : false, want : "\"'\""})]}),AllExpr.SeqExpr({ pos : { line : 426, col : 36, offset : 11551}, exprs : [AllExpr.NotExpr({ pos : { line : 426, col : 36, offset : 11551}, expr : AllExpr.CharClassMatcher({ pos : { line : 426, col : 37, offset : 11552}, val : "[{}]", chars : [HxOverrides.cca("{",0),HxOverrides.cca("}",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 414, col : 15, offset : 11001})]})]})}),AllExpr.SeqExpr({ pos : { line : 426, col : 57, offset : 11572}, exprs : [AllExpr.LitMatcher({ pos : { line : 426, col : 57, offset : 11572}, val : "{", ignoreCase : false, want : "\"{\""}),AllExpr.RuleRefExpr({ pos : { line : 426, col : 61, offset : 11576}, name : "CodeExpr"}),AllExpr.LitMatcher({ pos : { line : 426, col : 70, offset : 11585}, val : "}", ignoreCase : false, want : "\"}\""})]})]})})})},{ name : "CodeExpr2", pos : { line : 427, col : 1, offset : 11633}, expr : AllExpr.ActionExpr({ pos : { line : 427, col : 14, offset : 11646}, run : NovelPeg__callonCodeExpr21, expr : AllExpr.ZeroOrMoreExpr({ pos : { line : 427, col : 14, offset : 11646}, expr : AllExpr.ChoiceExpr({ pos : { line : 427, col : 16, offset : 11648}, alternatives : [AllExpr.OneOrMoreExpr({ pos : { line : 427, col : 16, offset : 11648}, expr : AllExpr.ChoiceExpr({ pos : { line : 427, col : 17, offset : 11649}, alternatives : [AllExpr.SeqExpr({ pos : { line : 420, col : 22, offset : 11263}, exprs : [AllExpr.LitMatcher({ pos : { line : 420, col : 22, offset : 11263}, val : "\"", ignoreCase : false, want : "\"\\\"\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 420, col : 26, offset : 11267}, expr : AllExpr.ChoiceExpr({ pos : { line : 420, col : 27, offset : 11268}, alternatives : [AllExpr.LitMatcher({ pos : { line : 420, col : 27, offset : 11268}, val : "\\\"", ignoreCase : false, want : "\"\\\\\\\"\""}),AllExpr.LitMatcher({ pos : { line : 420, col : 34, offset : 11275}, val : "\\\\", ignoreCase : false, want : "\"\\\\\\\\\""}),AllExpr.CharClassMatcher({ pos : { line : 420, col : 41, offset : 11282}, val : "[^\"\\r\\n]", chars : [HxOverrides.cca("\"",0),HxOverrides.cca("\r",0),HxOverrides.cca("\n",0)], ranges : [], ignoreCase : false, inverted : true})]})}),AllExpr.LitMatcher({ pos : { line : 420, col : 52, offset : 11293}, val : "\"", ignoreCase : false, want : "\"\\\"\""})]}),AllExpr.SeqExpr({ pos : { line : 421, col : 21, offset : 11320}, exprs : [AllExpr.LitMatcher({ pos : { line : 421, col : 21, offset : 11320}, val : "`", ignoreCase : false, want : "\"`\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 421, col : 25, offset : 11324}, expr : AllExpr.CharClassMatcher({ pos : { line : 421, col : 25, offset : 11324}, val : "[^`]", chars : [HxOverrides.cca("`",0)], ranges : [], ignoreCase : false, inverted : true})}),AllExpr.LitMatcher({ pos : { line : 421, col : 31, offset : 11330}, val : "`", ignoreCase : false, want : "\"`\""})]}),AllExpr.SeqExpr({ pos : { line : 422, col : 21, offset : 11357}, exprs : [AllExpr.LitMatcher({ pos : { line : 422, col : 21, offset : 11357}, val : "'", ignoreCase : false, want : "\"'\""}),AllExpr.ZeroOrMoreExpr({ pos : { line : 422, col : 26, offset : 11362}, expr : AllExpr.ChoiceExpr({ pos : { line : 422, col : 27, offset : 11363}, alternatives : [AllExpr.LitMatcher({ pos : { line : 422, col : 27, offset : 11363}, val : "\\'", ignoreCase : false, want : "\"\\\\'\""}),AllExpr.LitMatcher({ pos : { line : 422, col : 34, offset : 11370}, val : "\\\\", ignoreCase : false, want : "\"\\\\\\\\\""}),AllExpr.OneOrMoreExpr({ pos : { line : 422, col : 41, offset : 11377}, expr : AllExpr.CharClassMatcher({ pos : { line : 422, col : 41, offset : 11377}, val : "[^\\]", chars : [HxOverrides.cca("'",0)], ranges : [], ignoreCase : false, inverted : true})})]})}),AllExpr.LitMatcher({ pos : { line : 422, col : 49, offset : 11385}, val : "'", ignoreCase : false, want : "\"'\""})]}),AllExpr.SeqExpr({ pos : { line : 427, col : 37, offset : 11669}, exprs : [AllExpr.NotExpr({ pos : { line : 427, col : 37, offset : 11669}, expr : AllExpr.CharClassMatcher({ pos : { line : 427, col : 38, offset : 11670}, val : "[[]]", chars : [HxOverrides.cca("[",0),HxOverrides.cca("]",0)], ranges : [], ignoreCase : false, inverted : false})}),AllExpr.AnyMatcher({ line : 414, col : 15, offset : 11001})]})]})}),AllExpr.SeqExpr({ pos : { line : 427, col : 59, offset : 11691}, exprs : [AllExpr.LitMatcher({ pos : { line : 427, col : 59, offset : 11691}, val : "[", ignoreCase : false, want : "\"[\""}),AllExpr.RuleRefExpr({ pos : { line : 427, col : 63, offset : 11695}, name : "CodeExpr2"}),AllExpr.LitMatcher({ pos : { line : 427, col : 73, offset : 11705}, val : "]", ignoreCase : false, want : "\"]\""})]})]})})})}]};
 Main_main();
 })(exports);
 export default exports;

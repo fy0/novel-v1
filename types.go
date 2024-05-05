@@ -16,14 +16,16 @@ type StorySection struct {
 }
 
 type StorySectionLine struct {
-	Pos []int `json:"pos"` // line, col, pos
-
+	Pos  []int  `json:"pos"` // line, col, pos
 	Type string `json:"type,omitempty"`
 
-	// type: invoke 注: 这种情况下type置空，节省空间
+	// type: text 文本，注: 这种情况下type置空，节省空间
+	Text string `json:"text,omitempty"`
+
+	// type: invoke
 	Name   string   `json:"name,omitempty"`
 	Params []string `json:"params,omitempty"`
 
-	// type: code
+	// type: code 代码
 	Code string `json:"code,omitempty"`
 }

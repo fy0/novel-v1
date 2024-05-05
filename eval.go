@@ -5,12 +5,12 @@ import (
 )
 
 type StoryLoader struct {
-	Debug             bool
-	InvokeCallback    func(sl *StoryLoader, name string, params []string) (bool, error)
-	CodeCallback      func(sl *StoryLoader, expr string) (any, error)
-	ConditionCallback func(sl *StoryLoader, expr string) (bool, error)
+	Debug bool
 
-	PrintOverride  func(s string, lineEnd bool, speedMicroSecond int)
+	TextCallback func(sl *StoryLoader, text string, line, col int) error
+	CodeCallback func(sl *StoryLoader, code string, returnAs string) (any, error) // returnAs: bool, string, any
+
+	//InvokeCallback func(sl *StoryLoader, name string, params []string) (bool, error)
 	SelectOverride func(choices []string, resolve func(val int))
 
 	Error   error
@@ -38,14 +38,14 @@ ForLoop:
 		}
 
 		if i.Condition != "" {
-			if sl.ConditionCallback != nil {
-				var valid bool
-				valid, sl.Error = sl.ConditionCallback(sl, i.Condition)
+			if sl.CodeCallback != nil {
+				var valid any
+				valid, sl.Error = sl.CodeCallback(sl, i.Condition, "bool")
 				if sl.Error != nil {
 					break
 				}
 
-				if !valid {
+				if valid == false {
 					curIndex += 1 // 匹配失败，顺序向下
 					continue
 				}
@@ -54,29 +54,30 @@ ForLoop:
 
 		for _, line := range i.Lines {
 			switch line.Type {
-			case "":
+			case "": // text
 				if sl.Debug {
-					fmt.Println("line - invoke", line.Name, line.Params)
+					fmt.Printf("line - text %v\n", line.Text)
 				}
-				var solved bool
-				if sl.InvokeCallback != nil {
-					solved, sl.Error = sl.InvokeCallback(sl, line.Name, line.Params)
-					if sl.Error != nil {
-						break ForLoop
-					}
-				}
-				if !solved {
-					fmt.Printf("[Line %d Col %d] ERROR: invoke unsolved: %s\n", line.Pos[0], line.Pos[1], line.Name)
-				}
+				sl.TextCallback(sl, line.Text, line.Pos[0], line.Pos[1])
 
-			case "code":
+			case "codeBlock", "codeInText":
 				if sl.Debug {
 					fmt.Println("line - code", line.Code)
 				}
 
-				_, sl.Error = sl.CodeCallback(sl, line.Code)
+				returnAs := "any"
+				if line.Type == "codeInText" {
+					returnAs = "string"
+				}
+
+				var ret any
+				ret, sl.Error = sl.CodeCallback(sl, line.Code, returnAs)
 				if sl.Error != nil {
 					break ForLoop
+				}
+
+				if line.Type == "codeInText" {
+					sl.TextCallback(sl, fmt.Sprintf("%v", ret), line.Pos[0], line.Pos[1])
 				}
 			}
 		}

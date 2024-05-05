@@ -23,7 +23,7 @@ private function is16(ranges:Array<RangeChar>, r:UInt):Bool {
 				return false;
 			}
 			if (r <= i[1]) {
-				return i[2] == 1 || (r - i[0]) % i[2] == 0;
+				return i[2] == 1 || Std.int((r - i[0]) % i[2]) == 0;
 			}
 		}
 		return false;
@@ -36,7 +36,7 @@ private function is16(ranges:Array<RangeChar>, r:UInt):Bool {
 		var m = lo + Std.int((hi - lo) / 2);
 		var range_ = ranges[m];
 		if (range_[0] <= r && r <= range_[1]) {
-			return range_[2] == 1 || (r - range_[0]) % range_[2] == 0;
+			return range_[2] == 1 || Std.int((r - range_[0]) % range_[2]) == 0;
 		}
 		if (r < range_[0]) {
 			hi = m;

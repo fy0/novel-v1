@@ -1,7 +1,7 @@
 --main Main
 -D js-es=6
 --dce=full
---js=js/ns.mjs
+--js=js/ns.js
 # --interp
 
 # var exports = {};

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	ds "github.com/sealdice/dicescript"
@@ -18,6 +17,7 @@ func SetupDiceScript(sl *ns.StoryLoader) {
 	player := ds.VMValueNewDict(nil)
 	player.Store("力量", ds.VMValueNewInt(50))
 	scope["player"] = player.V()
+	scope["测试"] = ds.VMValueNewStr("12345")
 
 	scope["trace"] = ds.VMValueNewNativeFunction(&ds.NativeFunctionData{
 		Name:   "trace",
@@ -28,6 +28,21 @@ func SetupDiceScript(sl *ns.StoryLoader) {
 		},
 	})
 
+	doPrintTerminal := func(s string, lineEnd bool, speedMicroSecond int) {
+		if speedMicroSecond == 0 {
+			speedMicroSecond = 70
+		}
+		for _, i := range []rune(s) {
+			fmt.Print(string(i))
+			time.Sleep(time.Duration(speedMicroSecond) * time.Millisecond)
+		}
+		if lineEnd {
+			fmt.Print("\n")
+		}
+	}
+
+	doPrint := doPrintTerminal
+
 	vm.GlobalValueLoadFunc = func(name string) *ds.VMValue {
 		if val, ok := scope[name]; ok {
 			return val
@@ -35,128 +50,55 @@ func SetupDiceScript(sl *ns.StoryLoader) {
 		return nil
 	}
 
-	defaultInvokeCallback := func(sl *ns.StoryLoader, name string, params []string) (bool, error) {
-		doPrintTerminal := func(s string, lineEnd bool, speedMicroSecond int) {
-			if speedMicroSecond == 0 {
-				speedMicroSecond = 70
-			}
-			for _, i := range []rune(s) {
-				fmt.Print(string(i))
-				time.Sleep(time.Duration(speedMicroSecond) * time.Millisecond)
-			}
-			if lineEnd {
-				fmt.Print("\n")
-			}
+	doSelectTerminal := func(choices []string) int {
+		for index, text := range choices {
+			doPrint(fmt.Sprintf("> [%d]%s", index+1, text), true, 30)
 		}
 
-		doPrint := doPrintTerminal
-		if sl.PrintOverride != nil {
-			doPrint = sl.PrintOverride
-		}
-
-		doSelectTerminal := func(choices []string) int {
-			for index, text := range choices {
-				doPrint(fmt.Sprintf("> [%d]%s", index+1, text), true, 30)
-			}
-
-			var choice int64
-			for {
-				doPrint("输入选项序号:", false, 30)
-				var val string
-				read, _ := fmt.Scanln(&val)
-				if read > 0 {
-					var err error
-					choice, err = strconv.ParseInt(val, 10, 64)
-					if err == nil && choice > 0 && choice <= int64(len(params)) {
-						break
-					}
+		var choice int64
+		for {
+			doPrint("输入选项序号:", false, 30)
+			var val string
+			read, _ := fmt.Scanln(&val)
+			if read > 0 {
+				var err error
+				choice, err = strconv.ParseInt(val, 10, 64)
+				if err == nil && choice > 0 && choice <= int64(len(choices)) {
+					break
 				}
 			}
-
-			return int(choice)
 		}
 
-		doSelect := doSelectTerminal
-		if sl.SelectOverride != nil {
-			doSelect = func(choices []string) int {
-				x := make(chan int, 1)
+		return int(choice)
+	}
 
-				resolve := func(val int) {
-					go func() {
-						x <- val
-					}()
+	scope["select"] = ds.VMValueNewNativeFunction(&ds.NativeFunctionData{
+		Name:   "select",
+		Params: []string{"choices"},
+		NativeFunc: func(ctx *ds.Context, this *ds.VMValue, params []*ds.VMValue) *ds.VMValue {
+			var items []string
+			//for _, i := range params {
+			//	items = append(items, i.ToString())
+			//}
+			if params[0].TypeId == ds.VMTypeArray {
+				// 暂时先缩水，不支持变长
+				for _, i := range params[0].MustReadArray().List {
+					items = append(items, i.ToString())
 				}
-
-				sl.SelectOverride(choices, resolve)
-
-				v2 := <-x
-				return v2
 			}
-		}
-
-		switch name {
-		case "sayRaw":
-			doPrint(strings.TrimSpace(params[0]), true, 0)
-			return true, nil
-
-		case "say":
-			err := vm.Run(params[0])
-			if err != nil {
-				return false, err
-			}
-
-			doPrint(vm.Ret.ToString(), true, 0)
-			return true, nil
-
-		case "select":
-			var choices []string
-			for _, i := range params {
-				err := vm.Run(i)
-				if err != nil {
-					return false, err
-				}
-
-				choices = append(choices, vm.Ret.ToString())
-			}
-
-			choice := doSelect(choices)
-
+			choice := doSelectTerminal(items)
 			doPrint(fmt.Sprintf("你选择了: %d", choice), true, 30)
 			vm.StoreName("val", ds.VMValueNewInt(ds.IntType(choice)))
-			return true, nil
+			return ds.VMValueNewInt(ds.IntType(choice))
+		},
+	})
 
-		case "input":
-			line := ""
-			if len(params) > 0 {
-				line = params[0]
-			}
-			doPrint(line, false, 70)
-			var val string
-			fmt.Scanln(&val)
-			return true, nil
-		}
-
-		// 执行函数
-		code := fmt.Sprintf("%s(%s)", name, strings.Join(params, ","))
-		err := vm.Run(code)
-		if err != nil {
-			return false, err
-		}
-		return true, nil
+	sl.TextCallback = func(sl *ns.StoryLoader, text string, line, col int) error {
+		doPrint(text, false, 0)
+		return nil
 	}
 
-	sl.InvokeCallback = defaultInvokeCallback
-
-	sl.ConditionCallback = func(sl *ns.StoryLoader, expr string) (bool, error) {
-		err := vm.Run(expr)
-		if err != nil {
-			sl.Error = err
-			return false, sl.Error
-		}
-		return vm.Ret.AsBool(), nil
-	}
-
-	sl.CodeCallback = func(sl *ns.StoryLoader, expr string) (any, error) {
+	sl.CodeCallback = func(sl *ns.StoryLoader, expr string, returnAs string) (any, error) {
 		err := vm.Run(expr)
 		if err != nil {
 			sl.Error = err
@@ -166,6 +108,13 @@ func SetupDiceScript(sl *ns.StoryLoader) {
 			return nil, errors.New("无法读取的代码块: " + vm.RestInput)
 		}
 
-		return vm.Ret, nil
+		switch returnAs {
+		case "bool":
+			return vm.Ret.AsBool(), nil
+		case "string":
+			return vm.Ret.ToString(), nil
+		default:
+			return vm.Ret, nil
+		}
 	}
 }

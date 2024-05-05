@@ -5,8 +5,9 @@ import Macro;
 
 @:expose
 class StoryLoader {
-	public var invokeCallback:(sl:StoryLoader, name:String, params:Array<String>) -> Bool;
-	public var codeCallback:(sl:StoryLoader, code:String) -> Bool;
+	// public var invokeCallback:(sl:StoryLoader, name:String, params:Array<String>) -> Bool;
+	public var textCallback:(sl:StoryLoader, text:String) -> Any;
+	public var codeCallback:(sl:StoryLoader, code:String, returnAs:String) -> Any;
 
 	public var debug:Bool;
 	public var curLine:Int;
@@ -19,6 +20,26 @@ class StoryLoader {
 	public function parse(s:String):Story {
 		var p = new NovelPeg.Parser('', s + '\n', []);
 		var s = cast(p.parse(NovelPeg.g), Types.Story);
+
+		// 处理一下section末尾
+		for (i in s.items) {
+			// 检查最后有多少\n
+			var cur = i.lines.length - 1;
+			while (cur >= 0 && i.lines[cur].type == "" && i.lines[cur].text == "\n") {
+				cur--;
+			}
+			if (cur == -1) {
+				// 这一节全是回车
+				i.lines = [];
+			} else {
+				// 最后一条指令是文本，就保留\n
+				if (i.lines[cur].type == "" || i.lines[cur].type == "codeInText") {
+					i.lines = i.lines.slice(0, cur + 2);
+				} else {
+					i.lines = i.lines.slice(0, cur + 1);
+				}
+			}
+		}
 
 		for (i in s.items) {
 			if (i.next == "" || i.next == null) {
@@ -56,8 +77,8 @@ class StoryLoader {
 
 				if (i.condition != null && i.condition != "") {
 					if (this.codeCallback != null) {
-						var valid = await(this.codeCallback(this, i.condition));
-						if (!valid) {
+						var valid = await(this.codeCallback(this, i.condition, 'bool'));
+						if (!cast(valid, Bool)) {
 							curIndex += 1; // 匹配失败，顺序向下
 							continue;
 						}
@@ -68,17 +89,21 @@ class StoryLoader {
 					switch (line.type) {
 						case "":
 							if (this.debug) {
-								trace("line - invoke", line.name, line.params);
+								trace("line - text", line.text);
 							}
-							if (!await(this.invokeCallback(this, line.name, line.params))) {
-								trace('[Line ${line.pos[0]} Col ${line.pos[1]}] ERROR: invoke unsolved');
-							}
-						case "code":
+							await(this.textCallback(this, line.text));
+						case "codeBlock", "codeInText":
 							if (this.debug) {
 								trace("line - code", line.code);
 							}
-							if (line.code != null) {
-								await(this.codeCallback(this, line.code));
+							var returnAs = "any";
+							if (line.type == 'codeInText') {
+								returnAs = "string";
+							}
+							var ret = await(this.codeCallback(this, line.code, returnAs));
+
+							if (line.type == 'codeInText') {
+								await(this.textCallback(this, '${ret}'));
 							}
 					}
 				}

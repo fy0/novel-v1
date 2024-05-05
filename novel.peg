@@ -36,11 +36,40 @@ func parseFilterNil[T any](lines any, t T) []*T {
 	if x, ok := lines.([]any); ok {
 		for _, i := range x {
 			if i != nil {
-				items = append(items, i.(*T))
+				if _, ok2 := i.([]any); ok2 {
+					items = append(items, parseFilterNil(i, t)...)
+				} else {
+					items = append(items, i.(*T))
+				}
 			}
 		}
 	}
 	return items
+}
+
+func parseReturnTextSectionLine(c *current, text string) (any, error) {
+	return retWrap(&StorySectionLine{
+		Type: "", // 作为最常见种类，故意置空，节省空间
+		Pos:  []int{c.pos.line, c.pos.col, c.pos.offset},
+		Text: text,
+	}, nil)
+}
+
+func parseReturnInvokeSectionLine(c *current, name string, params []string) (any, error) {
+	return retWrap(&StorySectionLine{
+		Type:   "invoke",
+		Pos:    []int{c.pos.line, c.pos.col, c.pos.offset},
+		Name:   name,
+		Params: params,
+	}, nil)
+}
+
+func parseReturnCodeSectionLine(c *current, typeName string, code string) (any, error) {
+	return retWrap(&StorySectionLine{
+		Type: typeName,
+		Pos:  []int{c.pos.line, c.pos.col, c.pos.offset},
+		Code: code,
+	}, nil)
 }
 
 func gatherParams(first any, v any) []string {
@@ -99,11 +128,42 @@ function parseFilterNil(lines:Any):Array<Any> {
 		var x:Array<Any> = cast lines;
 		for (i in x) {
 			if (i != null) {
-				items.push(i);
+				if (Std.isOfType(i, Array)) {
+					for (j in parseFilterNil(i)) {
+						items.push(j);
+					}
+				} else {
+					items.push(i);
+				}
 			}
 		}
 	}
 	return items;
+}
+
+function parseReturnTextSectionLine(c:Current, text:String) {
+	return retWrap({
+		pos: [c.pos.line, c.pos.col, c.pos.offset],
+		type: "", // 作为最常见种类，故意置空，节省空间
+		text: text,
+	}, nil);
+}
+
+function parseReturnInvokeSectionLine(c:Current, name:String, params:Array<String>) {
+	return retWrap({
+		pos: [c.pos.line, c.pos.col, c.pos.offset],
+		type: "invoke",
+		name: name,
+		params: params,
+	}, nil);
+}
+
+function parseReturnCodeSectionLine(c:Current, typeName:String, code:String) {
+	return retWrap({
+		pos: [c.pos.line, c.pos.col, c.pos.offset],
+		type: typeName,
+		code: code,
+	}, nil);
 }
 
 function gatherParams(first:Any, v:Any):Array<String> {
@@ -124,6 +184,7 @@ var nil = null;
 {{ end }}
 }
 
+// ENTRY POINT
 input <- sp x:nodes !. {
     return retWrap(x, nil);
 }
@@ -142,13 +203,12 @@ nodes <- nodes:(node*) {
 {{ end }}
 }
 
-_nodeCondContent <- [^\]]+ { return retWrap(toStr(c.text), nil); }
-_nodeCond <- '[' cond:_nodeCondContent? ']' { return retWrap(cond, nil); }
+_nodeCond <- '[' cond:CodeExpr2? ']' { return retWrap(cond, nil); }
 _nodeNext <- '[' name:identifier ']' { return retWrap(name, nil); }
 
 node <- nodeType1 / nodeType2
 
-nodeType1 <- ':' spNoCR name:identifier? spNoCR (cond:_nodeCond spNoCR next:_nodeNext?) spNoCR cr lines:nodeLines {
+nodeType1 <- ':' spNoCR name:identifier? spNoCR (cond:_nodeCond spNoCR next:_nodeNext?) spNoCR cr2 lines:nodeLines {
 {{ if eq .target "go" }}
     nameStr, _ := name.(string)
     condStr, _ := cond.(string)
@@ -183,7 +243,7 @@ nodeType1 <- ':' spNoCR name:identifier? spNoCR (cond:_nodeCond spNoCR next:_nod
 {{ end }}
 }
 
-nodeType2 <- ':' name:identifier? spNoCR cr lines:nodeLines {
+nodeType2 <- ':' spNoCR name:identifier? spNoCR cr2 lines:nodeLines {
 {{ if eq .target "go" }}
     nameStr, _ := name.(string)
     items := parseFilterNil(lines, StorySectionLine{})
@@ -214,80 +274,92 @@ nodeType2 <- ':' name:identifier? spNoCR cr lines:nodeLines {
 
 nodeLines <- lines:nodeLine* sp { return retWrap(lines, nil); }
 
-nodeLine <- nodeLineTypeComment / nodeLineType1 / nodeLineType2 / nodeLineType3
+nodeLine <- nodeLineTypeComment / nodeLineType2 / nodeLineCommonText
 
 nodeLineTypeComment <- '@' '#' (!cr .)+ cr sp { return retWrap(nil, nil); }
 
+_curLine <- (!cr .)+ { return retWrap(toStr(c.text), nil); }
+nodeLineType1x <- '@' !'{' expr:_curLine cr2 {
+    return parseReturnCodeSectionLine(c, "@", expr.(string));
+}
+
 nodeLineType1 <- '@' name:identifier params:funcInvoke sp {
 {{ if eq .target "go" }}
-    nameStr, _ := name.(string)
-
-    return retWrap(&StorySectionLine{
-        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
-        Name: nameStr,
-        Params: params.([]string),
-    }, nil);
+    return parseReturnInvokeSectionLine(c, name.(string), params.([]string))
 {{ else }}
-    return retWrap({
-        type: "",
-        pos:[c.pos.line, c.pos.col, c.pos.offset],
-        name:name,
-        params:params,
-    }, nil);
+    return parseReturnInvokeSectionLine(c, name, params);
 {{ end }}
 }
 
-nodeLineType2 <- "@{" code:_storyNodeCodeBlock "}!" spNoCR cr {
+
+// _storyNodeCodeBlock <- ( ( !"}!" . )* ) { return retWrap(toStrWithTrim(c.text), nil); }
+
+nodeLineType2 <- "@{" code:Code ("}!" / "}") spNoCR cr2 {
 {{ if eq .target "go" }}
-    return retWrap(&StorySectionLine{
-        Type: "code",
-        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
-        Code: code.(string),
-    }, nil);
+    return parseReturnCodeSectionLine(c, "codeBlock", code.(string));
 {{ else }}
-    return retWrap({
-        pos:[c.pos.line, c.pos.col, c.pos.offset],
-        type:'code',
-        code:code,
-    }, nil);
+    return parseReturnCodeSectionLine(c, "codeBlock", code);
 {{ end }}
 }
 
-nodeLineType3Text <- ( ![:@] [^\r\n]* cr )+ { return retWrap(toStr(c.text), nil); }
-nodeLineType3 <- text:nodeLineType3Text {
+_nltEscape <- "\\{" { return retWrap("{", nil); }
+_nltChar <- [^\r\n{] { return retWrap(toStr(c.text), nil); }
+nodeLineText <- items:((_nltEscape / _nltChar)+) {
 {{ if eq .target "go" }}
-    if strings.TrimSpace(text.(string)) == "" {
-        return nil, nil
+    var items2 []string
+    for _, i := range items.([]any) {
+        items2 = append(items2, i.(string));
     }
-    return retWrap(&StorySectionLine{
-        Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
-        Name: "sayRaw",
-        Params: []string{text.(string)},
-    }, nil)
+    text := strings.Join(items2, "")
+    return parseReturnTextSectionLine(c, text);
 {{ else }}
-    if (StringTools.trim(c.text) == "") {
-        return retWrap(null, null);
-    }
-    return retWrap({
-        pos:[c.pos.line, c.pos.col, c.pos.offset],
-        name:'sayRaw',
-        type:"",
-        params:[text],
-    }, nil);
+	var items2 = [];
+	if (Std.isOfType(items, Array)) {
+		var itemsX:Array<Any> = cast items;
+		for (i in itemsX) {
+			items2.push(i);
+		}
+	}
+	var text = items2.join("");
+	return parseReturnTextSectionLine(c, text);
 {{ end }}
 }
 
-_storyNodeCodeBlock <- ( ( !"}!" . )* ) { return retWrap(toStrWithTrim(c.text), nil); }
+nodeLineExprBlock <- '{' expr:CodeExpr '}' {
+{{ if eq .target "go" }}
+    return parseReturnCodeSectionLine(c, "codeInText", expr.(string));
+{{ else }}
+    return parseReturnCodeSectionLine(c, "codeInText", expr);
+{{ end }}
+}
+
+// Line not starts with [:@], normal text and {expr} are available.
+nodeLineCommonText <- ![:@] items:(( nodeLineText / nodeLineExprBlock )*) cr2 {
+{{ if eq .target "go" }}
+    v, _ := parseReturnTextSectionLine(c, "\n");
+    items2 := items.([]any)
+    items2 = append(items2, v);
+    return retWrap(items2, nil);
+{{ else }}
+	var x = parseReturnTextSectionLine(c, "\n");
+	var items2:Array<Any> = null;
+	if (Std.isOfType(items, Array)) {
+		items2 = cast items;
+		items2.push(x.val);
+	}
+	return retWrap(items2, nil);
+{{ end }}
+}
 
 funcInvoke <- '(' sp ')' { {{ if eq .target "go" }} return retWrap([]string{}, nil) {{ else }} return retWrap([], nil); {{ end }} }
-            / '(' sp first:codeExpr rest:(funcInvokeParamExtend*) ')' { return retWrap(gatherParams(first, rest), nil); }
+            / '(' sp first:_codeExpr rest:(funcInvokeParamExtend*) ')' { return retWrap(gatherParams(first, rest), nil); }
 
-funcInvokeParamExtend <- sp ',' sp e:codeExpr { return retWrap(e, nil); }
+funcInvokeParamExtend <- sp ',' sp e:_codeExpr { return retWrap(e, nil); }
 
 // codeExpr <- [^\n,)]+ { return retWrap(toStr(c.text), nil); }
-codeExpr <- codeExpr2 { return retWrap(toStr(c.text), nil); }
+_codeExpr <- _codeExpr2 { return retWrap(toStr(c.text), nil); }
 
-codeExpr2 <- identifier
+_codeExpr2 <- identifier
            / integer
            / [0-9]* '.' [0-9]+
            / stringType
@@ -336,3 +408,20 @@ sp "whitespace" <- [ \n\t\r]*
 spNoCR <- [ \t]*
 
 cr <- [\r\n]
+cr2 <- '\r'? '\n'
+
+// 仅支持 // 为注释，支持'' "" `` 三种文本的脚本语言
+SourceChar <- .
+Comment <- MultiLineComment / SingleLineComment
+MultiLineComment <- "/*" ( !"*/" SourceChar )* "*/"
+MultiLineCommentNoLineTerminator <- "/*" ( !( "*/" / cr ) SourceChar )* "*/"
+SingleLineComment <- !("//{") "//" ( !cr SourceChar )*
+
+CodeStringLiteral <- '"' (`\"` / `\\` / [^"\r\n])* '"' /
+                    '`' [^`]* '`' /
+                    '\'' (`\'` / `\\` / [^']+)* '\''
+
+
+Code <- ( ( Comment / CodeStringLiteral / ![{}] SourceChar )+ / '{' Code '}' )* { return retWrap(toStr(c.text), nil); }
+CodeExpr <- ( (CodeStringLiteral / ![{}] SourceChar)+ / '{' CodeExpr '}' )* { return retWrap(toStr(c.text), nil); }
+CodeExpr2 <- ( (CodeStringLiteral / ![[\]] SourceChar)+ / '[' CodeExpr2 ']' )* { return retWrap(toStr(c.text), nil); }

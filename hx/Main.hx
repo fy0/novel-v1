@@ -1,3 +1,4 @@
+import haxe.Json;
 import Eval.StoryLoader;
 import Macro;
 
@@ -7,6 +8,7 @@ function main() {
 	#end
 }
 
+#if !js
 function demo() {
 	var sl = new StoryLoader();
 	var r = sl.parse("
@@ -22,22 +24,23 @@ function demo() {
 :第三段
 结束");
 
-	sl.invokeCallback = async(function(sl:StoryLoader, name:String, params:Array<String>) {
-		// trace(name, params);
-		switch (name) {
-			case "sayRaw":
-				trace(sl.curLine, params[0]);
-				return true;
-		}
-		return true;
+	// for (x in r.items) {
+	// 	trace('分段: ', x.name);
+	// 	for (j in x.lines) {
+	// 		trace(Json.stringify(j));
+	// 	}
+	// }
+
+	sl.textCallback = async(function(sl:StoryLoader, text:String) {
+		Sys.print(text);
 	});
 
-	sl.codeCallback = async(function(sl:StoryLoader, name:String) {
+	sl.codeCallback = async(function(sl:StoryLoader, name:String, returnAs:String) {
 		// 这里没法真的运行代码，只是一个测试
 		// trace(name, params);
 		return true;
 	});
 
 	sl.eval(r);
-	trace(r.items.length);
 }
+#end

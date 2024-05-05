@@ -2,7 +2,10 @@ typedef StorySectionLine = {
 	var pos:Array<Int>; // line, col, pos
 	var type:String;
 
-	// type: invoke 注: 这种情况下type置空，节省空间
+	// type: text 文本，注: 这种情况下type置空，节省空间
+	@:optional var text:String;
+
+	// type: invoke 这种暂时不存在了
 	@:optional var name:String;
 	@:optional var params:Array<String>;
 
