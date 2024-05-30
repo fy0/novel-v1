@@ -22,7 +22,8 @@ function demo() {
    任何格式都会原样输出
 
 :第三段
-结束");
+结束
+");
 
 	// for (x in r.items) {
 	// 	trace('分段: ', x.name);
@@ -33,6 +34,7 @@ function demo() {
 
 	sl.textCallback = async(function(sl:StoryLoader, text:String) {
 		Sys.print(text);
+		return null;
 	});
 
 	sl.codeCallback = async(function(sl:StoryLoader, name:String, returnAs:String) {

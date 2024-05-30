@@ -6,6 +6,7 @@ import (
 
 func ParseText(d string) (*Story, error) {
 	p := newParser("", []byte(d+"\n"))
+	//p.recover = false
 	v, err := p.parse(g)
 
 	if err != nil {

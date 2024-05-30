@@ -15,14 +15,231 @@
   <!--  <script>eruda.init();</script>-->
 
   <script>
-    var defaultScript = ["",":开始","你是一名勇者。","经过艰难的抉择，刻苦的磨炼，以及不懈的努力。","你来到了这里。","只要打倒魔王，一切就结束了！","","会赢吗？","会赢的。","来战斗吧！","","注: 伤害公式 = 攻击/2 + d(攻击)","",":init","@{","    var me, e, val, a, b, c;","    var d = (n) =\u003e parseInt(Math.random() * n + 1);","    me = { 'hp': 30 + d(30), 'spd': 5 + d(5), 'atk': 5 + d(5), 'name': '玩家' };","}","",":遇怪循环[me.atk\u003e50][打boss]","时机成熟了，去打BOSS!","",":遇怪","","战！","@{","    e = { 'hp': d(40), 'spd': d(me.spd)+d(10), 'atk': d(me.atk)+d(10), 'name': ['哥布林', '软泥怪', '骷髅兵'][d(3)-1] };","}","遇到怪物 {e.name}","","",":打怪循环","","玩家属性 生命{me.hp} 速度{me.spd} 攻击 {me.atk}","怪物属性 生命{e.hp} 速度{e.spd} 攻击 {e.atk} \u003c{e.name}\u003e","@{ select(`战斗!`, '逃跑', '不玩了！') }","",":[val == 1]","","@{","// a为先攻，b为后手","if (me.spd \u003e= e.spd) {","    a = me;","    b = e;","} else {","    a = e;","    b = me;","}","","let _dmg1 = a.atk / 2 + d(a.atk); // 攻方攻击力","let _dmg2 = b.atk / 2 + d(b.atk); // 守方攻击力","","let save_bhp = b.hp;","let save_ahp = a.hp;","","b.hp = b.hp - _dmg1;","if (b.hp \u003e 0) {","    a.hp = a.hp - _dmg2;","}","","var text = `先攻: ${a.name} 造成伤害: ${a.atk/2}+d${a.atk}=${_dmg1}","${b.name} 生命值: ${save_bhp} -\u003e ${b.hp}`;","","var isEnd = false;","","if (b.hp \u003c= 0) {","    isEnd = true;","    text = text + `\\n${b.name} 挂了!`;","} else {","    text = text + `\\n后手: ${b.name} 造成伤害: ${b.atk/2}+d${b.atk}=${_dmg2}","${a.name} 生命值: ${save_ahp} -\u003e ${a.hp}`;","","    if (a.hp \u003c= 0) {","        text = text + `\\n${a.name} 挂了!`;","        isEnd = true;","        // 互换 a b","        c = a; a = b; b = c;","    }","}","","if (isEnd) {","    // 之后 a 代表胜者，b代表败者","    if (a.name == '玩家') {","        let hpPlus = d(15);","        let atkPlus = d(b.atk);","        text = text + `\\n\\n玩家胜利！hp 恢复 d15=${hpPlus} \\n攻击力增加 d${b.atk} = ${atkPlus}`;","        a.atk = a.atk + atkPlus;","        a.hp = a.hp + hpPlus;","    } else {","        text = text + `玩家阵亡!`;","    }","}","","}!","{text}","",":[val == 1 \u0026\u0026 me.hp \u003c 0][end]","啊，我死了","",":[val == 1 \u0026\u0026 e.hp \u003e 0][打怪循环]",":[val == 1 \u0026\u0026 e.hp \u003c= 0][遇怪循环]","",":[val == 2][遇怪循环]","先跑路了，换一只怪！","",":[val == 3][回去了]","","",":打boss","","这是boss，但是意外的非常弱。","你看了他一眼，把boss瞪死了。","","",":结束[][end]","","这是一个对于剧情脚本的测试demo","并未经过认真编写，","不过还是感谢游玩。","","右上角可以看到源码。","同时还在持续的修改中。","查看页面源码可以看到是怎样和js绑定的，这里打印文本之类其实可以用异步函数，但是较早的时候写于同步版本，就没有修改。实际可以更简洁的。","",":回去了","你感到无聊，走了。","",":end","完","","@{","// 其实我不太觉得这是一个好例子","// 应该说是比较差的例子了","// 因为里面塞了一个简易战斗，这其实不应该是剧情脚本引擎应该解决的问题","// 战斗的处理应该在外面的战斗系统来进行，剧情展示中即使有，也只做简单的调用","// 后面再搞别的例子吧","}",""];
+    var defaultScript = [":开始", "你是一名勇者。", "经过艰难的抉择，刻苦的磨炼，以及不懈的努力。", "你来到了这里。", "只要打倒魔王，一切就结束了！", "", "会赢吗？", "会赢的。", "来战斗吧！", "", "注: 伤害公式 = 攻击/2 + d(攻击)", "", ":init", "@{", "    vars.d = (n) =\u003e parseInt(Math.random() * n + 1);", "    vars.me = { 'hp': 30 + d(30), 'spd': 5 + d(5), 'atk': 5 + d(5), 'name': '玩家' };", "}", "", ":遇怪循环[me.atk\u003e50][打boss]", "时机成熟了，去打BOSS!", "", ":遇怪", "", "战！", "@{", "    vars.e = { 'hp': d(40), 'spd': d(me.spd)+d(10), 'atk': d(me.atk)+d(10), 'name': ['哥布林', '软泥怪', '骷髅兵'][d(3)-1] };", "}", "遇到怪物 {e.name}", "", "", ":打怪循环", "", "玩家属性 生命{me.hp} 速度{me.spd} 攻击 {me.atk}", "怪物属性 生命{e.hp} 速度{e.spd} 攻击 {e.atk} \u003c{e.name}\u003e", "@{ await select(`战斗!`, '逃跑', '不玩了！') }", "", ":[val == 1]", "", "@{", "let a, b;", "// a为先攻，b为后手", "if (me.spd \u003e= e.spd) {", "    a = me;", "    b = e;", "} else {", "    a = e;", "    b = me;", "}", "", "let _dmg1 = a.atk / 2 + d(a.atk); // 攻方攻击力", "let _dmg2 = b.atk / 2 + d(b.atk); // 守方攻击力", "", "let save_bhp = b.hp;", "let save_ahp = a.hp;", "", "b.hp = b.hp - _dmg1;", "if (b.hp \u003e 0) {", "    a.hp = a.hp - _dmg2;", "}", "", "var text = `先攻: ${a.name} 造成伤害: ${a.atk/2}+d${a.atk}=${_dmg1}", "${b.name} 生命值: ${save_bhp} -\u003e ${b.hp}`;", "", "let isEnd = false;", "", "if (b.hp \u003c= 0) {", "    isEnd = true;", "    text = text + `\\n${b.name} 挂了!`;", "} else {", "    text = text + `\\n后手: ${b.name} 造成伤害: ${b.atk/2}+d${b.atk}=${_dmg2}", "${a.name} 生命值: ${save_ahp} -\u003e ${a.hp}`;", "", "    if (a.hp \u003c= 0) {", "        text = text + `\\n${a.name} 挂了!`;", "        isEnd = true;", "        // 互换 a b", "        c = a; a = b; b = c;", "    }", "}", "", "if (isEnd) {", "    // 之后 a 代表胜者，b代表败者", "    if (a.name == '玩家') {", "        let hpPlus = d(15);", "        let atkPlus = d(b.atk);", "        text = text + `\\n\\n玩家胜利！hp 恢复 d15=${hpPlus} \\n攻击力增加 d${b.atk} = ${atkPlus}`;", "        a.atk = a.atk + atkPlus;", "        a.hp = a.hp + hpPlus;", "    } else {", "        text = text + `玩家阵亡!`;", "    }", "}", "vars.text = text;", "}", "{text}", "", ":[val == 1 \u0026\u0026 me.hp \u003c 0][end]", "啊，我死了", "", ":[val == 1 \u0026\u0026 e.hp \u003e 0][打怪循环]", ":[val == 1 \u0026\u0026 e.hp \u003c= 0][遇怪循环]", "", ":[val == 2][遇怪循环]", "先跑路了，换一只怪！", "", ":[val == 3][回去了]", "", "", ":打boss", "", "这是boss，但是意外的非常弱。", "你看了他一眼，把boss瞪死了。", "", "", ":结束[][end]", "", "这是一个对于剧情脚本的测试demo", "并未经过认真编写，", "不过还是感谢游玩。", "", "右上角可以看到源码。", "同时还在持续的修改中。", "查看页面源码可以看到是怎样和js绑定的，这里打印文本之类其实可以用异步函数，但是较早的时候写于同步版本，就没有修改。实际可以更简洁的。", "", ":回去了", "你感到无聊，走了。", "", ":end", "完", "", "@{", "// 其实我不太觉得这是一个好例子", "// 应该说是比较差的例子了", "// 因为里面塞了一个简易战斗，这其实不应该是剧情脚本引擎应该解决的问题", "// 战斗的处理应该在外面的战斗系统来进行，剧情展示中即使有，也只做简单的调用", "// 后面再搞别的例子吧", "}", ""];
+    var dataExportOpen = false;
+    var dataExport = {
+      template: `// ==UserScript==
+// @name         剧情模板
+// @author       木落
+// @version      0.0.1
+// @description  示例：一个kpless故事书框架，测试版
+// @timestamp    2024-05-06
+// @license      Apache-2
+// @homepageURL  https://github.com/sealdice/javascript
+// ==/UserScript==
+
+const extName = 'storybook-001'
+const msgStart = '故事书，启动'
+const msgEnd = '故事书，关闭'
+
+let storybookOn = false;
+
+/*
+ TODO: 
+  * 进度储存
+  * 多群共用支持
+  * 个人进度模式 / 群共用进度模式
+*/
+
+let ext = seal.ext.find(extName)
+if (!ext) {
+  ext = seal.ext.new(extName, '木落', '1.0.0');
+  seal.ext.register(ext);
+  let story = {};
+  let nsEval = null;
+
+  // 发送消息的函数，等收到消息时将其赋值
+  let doPrint = (text) => {
+    ;
+  }
+
+  // 接收到消息时，挨个调用里面所有的函数，并将其清空
+  const replyListener = [];
+
+  // 处理接收消息
+  ext.onNotCommandReceived = (ctx, msg) => {
+    doPrint = (text) => {
+      seal.replyToSender(ctx, msg, text);
+    }
+
+    // 处理开关
+    if ((!storybookOn) && msg.message === msgStart) {
+      storybookOn = true;
+      console.log('故事书插件触发');
+      doPrint('故事书插件触发，输入 "' + msgEnd + '" 可强制中止当前剧本。\\n这是一种特殊插件，由剧情脚本工具自动生成。')
+      nsEval(story);
+      return;
+    }
+    if (!storybookOn) return;
+    if (msg.message === msgEnd) {
+      storybookOn = false;
+      return;
+    }
+
+    // 处理剧情部分，仅在被at时起效
+    // console.log('debug', msg.amIBeMentioned, ctx.isPrivate)
+    if (msg.amIBeMentioned || ctx.isPrivate) {
+      for (let i of replyListener) i(msg.message);
+      replyListener.length = 0;
+    }
+  }
+
+  class Printer {
+    constructor() {
+      this.buf = [];
+    }
+
+    print(s) {
+      // 由于QQ等平台的特殊性，这里print并不直接对应发送消息
+      // 不然的话发的太多，所以存起来等flush时候统一发送
+      this.buf.push(s);
+    }
+
+    printFlush() {
+      const text = this.buf.join('');
+      this.buf.length = 0;
+      if (text) {
+        doPrint(text);
+      }
+    }
+
+    async doSelect(choices) {
+      for (let i = 0; i < choices.length; i++) {
+        this.print('> [' + (i + 1) + ']' + choices[i] + '\\n');
+      }
+
+      let choice = 0;
+      while (true) {
+        this.print("输入选项序号:");
+        this.printFlush();
+        const waitInput = new Promise(resolve => {
+          replyListener.push(resolve); // resolve时自动pop
+        });
+        // 等待拿到序号
+        choice = parseInt(await waitInput);
+        if (choice > 0 && choice <= choices.length) {
+          break;
+        }
+      }
+      return choice;
+    }
+  }
+
+  const p = new Printer();
+
+  let createScope = function () {
+    let scope = {};
+    let vars = {};
+    scope.vars = {
+      select: async (...args) => {
+        let choices = [];
+        for (let i of args) {
+          choices.push(i);
+        }
+        let choice = await p.doSelect(choices);
+        vars.val = choice;
+        return choice;
+      },
+      data: {},
+    };
+    scope.vars.vars = scope.vars;
+    vars = scope.vars;
+    scope.evalBlock = function (code) {
+      // return new Function('with(this) {' + code + '}').call(scope.vars);
+      return new Function('return (async () => { with(this) {' + code + '} })()').call(scope.vars);
+    };
+    scope.evalExpr = function (code) {
+      return new Function('with(this) { return(' + code + ') }').call(scope.vars);
+    };
+    return scope;
+  };
+
+  const scope = createScope();
+  nsEval = async function (s) {
+    // 这个函数看着比较乱，因为是编译出来的，不过不需要太管
+    // 源码在: https://github.com/fy0/novel-v1/blob/v2/hx/Eval.hx
+    const _gthis = {
+      curLine: 0,
+      textCallback: async (sl, text) => {
+        // console.log('text', [text]);
+        await p.print(text);
+      },
+      codeCallback: async (sl, code, returnAs) => {
+        switch (returnAs) {
+          case 'string': {
+            const r = scope.evalExpr(code);
+            return String(r);
+          }
+          case 'bool': {
+            const r = scope.evalExpr(code);
+            return Boolean(r);
+          }
+        }
+        const r = scope.evalBlock(code);
+        return r;
+      },
+    }
+
+    const Bool = null;
+    const js_Boot = { __cast: (val) => val };
+
+    let curIndex = 0;
+    while (!(curIndex < 0 || curIndex >= s.items.length)) {
+      let i = s.items[curIndex];
+      _gthis.curLine = i.pos[0];
+      // console.log('section {i.name}');
+
+      if (i.condition != null && i.condition != "") {
+        if (_gthis.codeCallback != null) {
+          let valid = (await _gthis.codeCallback(_gthis, i.condition, "bool"));
+          if (!js_Boot.__cast(valid, Bool)) {
+            ++curIndex;
+            continue;
+          }
+        }
+      }
+      let _g = 0;
+      let _g1 = i.lines;
+      while (_g < _g1.length) {
+        let line = _g1[_g];
+        // console.log('line {_g}: {JSON.stringify(line)}');
+        ++_g;
+        switch (line.type) {
+          case "":
+            (await _gthis.textCallback(_gthis, line.text));
+            break;
+          case "codeBlock": case "codeInText":
+            let returnAs = "any";
+            if (line.type == "codeInText") {
+              returnAs = "string";
+            }
+            let ret = (await _gthis.codeCallback(_gthis, line.code, returnAs));
+            if (line.type == "codeInText") {
+              (await _gthis.textCallback(_gthis, "" + ret));
+            }
+            break;
+        }
+      }
+      // console.log('xxxx {curIndex} i.nextIndex')
+      curIndex = i.nextIndex;
+    }
+    p.printFlush();
+    return 0;
+  }
+
+  // 剧本代码
+  story = '<%STORY-BLOCK%>'
+
+}`,
+      code: ''
+    }
   </script>
 
   <div id="app" class="text-xl m-8 relative">
     <!-- 很怪的设定，但是，临时用用，先接受这个设定  -->
   </div>
 
-  <div class="absolute mr-8 mt-4" style="right:0; top:0" x-data="{ code: defaultScript.join('\n'), open: false }">
+  <div class="absolute mr-8 mt-4" style="right:0; top:0" x-data="{ code: defaultScript.join('\n'), open: false, dataExport: dataExport }">
     <div x-show="open">
       <textarea x-model="code" rows="10" cols="40" class="border border-gray-500 p-4"></textarea>
     </div>
@@ -31,7 +248,13 @@
         class="ml-4 float-right border-2 border-blue-500 bg-white text-blue-500 hover:bg-blue-500 hover:text-white py-2 px-4 rounded">脚本显隐</button>
       <button @click="compileAndRun(code)"
         class="float-right border-2 border-blue-500 bg-white text-blue-500 hover:bg-blue-500 hover:text-white py-2 px-4 rounded">执行</button>
+      <button @click="doExport()"
+        class="float-right border-2 border-blue-500 bg-white text-blue-500 hover:bg-blue-500 hover:text-white py-2 px-4 rounded">导出sealdice</button>
     </div>
+    <div x-show="dataExport.code" class="">
+      <textarea x-model="dataExport.code" rows="10" cols="40" class="border border-gray-500 p-4 mt-2"></textarea>
+    </div>
+
     <div><a href="https://github.com/fy0/novel-v1" target="_blank" class="text-blue-400">github.com/fy0/novel-v1</a>
     </div>
   </div>
@@ -150,34 +373,54 @@
 
     const newLoader = () => {
       const sl = new ns.StoryLoader();
+      let vars = null;
 
-      globalThis.val = 0;
-      let myEval = eval;
+      let createScope = function () {
+        let scope = {};
+        scope.vars = {
+          select: async (...args) => {
+            let choices = [];
+            for (let i of args) {
+              choices.push(i);
+            }
+            let choice = await doSelect(choices);
+            await doPrint(`你选择了: ${choice}`, true, 30);
+            vars.val = choice;
+            return choice;
+          },
+          data: {},
+        };
+        scope.vars.vars = scope.vars;
+        vars = scope.vars;
+        scope.evalBlock = function (code) {
+          // return new Function('with(this) {' + code + '}').call(scope.vars);
+          return new Function('return (async () => { with(this) {' + code + '} })()').call(scope.vars);
+        };
+        scope.evalExpr = function (code) {
+          return new Function('with(this) { return(' + code + ') }').call(scope.vars);
+        };
+        return scope;
+      };
 
-      const select = async (...args) => {
-        let choices = [];
-        for (let i of args) {
-          choices.push(i);
-        }
-        let choice = await doSelect(choices);
-        await doPrint(`你选择了: ${choice}`, true, 30);
-        val = choice;
-        return choice;
-      }
-      window.select = select;
+      const scope = createScope();
+      console.log('scope', scope);
 
       sl.textCallback = async (sl, text) => {
         await doPrint(text, false, 0);
       }
 
       sl.codeCallback = async (sl, code, returnAs) => {
-        const r = myEval(code);
         switch (returnAs) {
-          case 'string':
+          case 'string': {
+            const r = scope.evalExpr(code);
             return String(r);
-          case 'bool':
+          }
+          case 'bool': {
+            const r = scope.evalExpr(code);
             return Boolean(r);
+          }
         }
+        const r = scope.evalBlock(code);
         return r;
       }
 
@@ -185,8 +428,9 @@
     }
 
     const sl = newLoader();
-    const s = sl.parse(defaultScript.join('\n'));
+    let s = sl.parse(defaultScript.join('\n'));
     console.log(s);
+    dataExport.story = s;
     sl.eval(s);
 
     window.compileAndRun = (code) => {
@@ -195,11 +439,28 @@
       setTimeout(() => {
         seq.clear();
         const sl = newLoader()
-        const s = sl.parse(code);
+        s = sl.parse(code);
+        dataExport.story = s;
         console.log(s);
         sl.eval(s);
       }, 500);
     }
+
+    window.doExport = function () {
+      alert('注意，此处导出的是最后一次执行的代码，可以在sealdice中作为js插件加载。\n代码中的msgStart和msgEnd分别为开始和结束的提示词，用户@骰子发这两个就能开始剧情\n记得同时修改作者信息！\n可能不会第一时间显示，需要点两下显隐')
+      function replacer(key, value) {
+        if (key === 'pos' && Array.isArray(value)) {
+          return '';
+        }
+        return value;
+      }
+      const str = JSON.stringify(s, replacer, 2);
+      // console.log(str);
+      dataExport.code = dataExport.template.replace("'<%STORY-BLOCK%>'", str);
+      dataExportOpen = true;
+      return s;
+    }
+
   </script>
 </body>
 

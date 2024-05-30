@@ -1,9 +1,11 @@
 --main Main
 -D js-es=6
 --dce=full
---js=js/ns.js
+--js=js/x/ns.js
 # --interp
+# -lib genes
 
+-D dts
 # var exports = {};
 
 # })(exports);

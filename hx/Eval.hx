@@ -12,6 +12,12 @@ class StoryLoader {
 	public var debug:Bool;
 	public var curLine:Int;
 
+	var state = {
+		// 等下，版本更新后的存档问题怎么办？
+		sectionIndex: 0,
+		lineIndex: 0,
+	}
+
 	public function new() {
 		debug = false;
 		curLine = 0;
@@ -57,9 +63,10 @@ class StoryLoader {
 
 	public function eval(s:Story):Int {
 		return async(() -> {
-			var curIndex:Int = 0;
+			var curIndex:Int = state.sectionIndex;
 
 			while (true) {
+				state.sectionIndex = curIndex;
 				if (curIndex < 0 || curIndex >= s.items.length) {
 					break;
 				}

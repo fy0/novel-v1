@@ -1,5 +1,5 @@
 {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
 package novelscript
 
 import "strings"
@@ -47,29 +47,29 @@ func parseFilterNil[T any](lines any, t T) []*T {
 	return items
 }
 
-func parseReturnTextSectionLine(c *current, text string) (any, error) {
-	return retWrap(&StorySectionLine{
+func parseReturnTextSectionLine(c *current, text string) any {
+	return &StorySectionLine{
 		Type: "", // 作为最常见种类，故意置空，节省空间
 		Pos:  []int{c.pos.line, c.pos.col, c.pos.offset},
 		Text: text,
-	}, nil)
+	}
 }
 
-func parseReturnInvokeSectionLine(c *current, name string, params []string) (any, error) {
-	return retWrap(&StorySectionLine{
+func parseReturnInvokeSectionLine(c *current, name string, params []string) any {
+	return &StorySectionLine{
 		Type:   "invoke",
 		Pos:    []int{c.pos.line, c.pos.col, c.pos.offset},
 		Name:   name,
 		Params: params,
-	}, nil)
+	}
 }
 
-func parseReturnCodeSectionLine(c *current, typeName string, code string) (any, error) {
-	return retWrap(&StorySectionLine{
+func parseReturnCodeSectionLine(c *current, typeName string, code string) any {
+	return &StorySectionLine{
 		Type: typeName,
 		Pos:  []int{c.pos.line, c.pos.col, c.pos.offset},
 		Code: code,
-	}, nil)
+	}
 }
 
 func gatherParams(first any, v any) []string {
@@ -84,10 +84,6 @@ func gatherParams(first any, v any) []string {
 		}
 	}
 	return items
-}
-
-func retWrap(a any, err error) (any, error) {
-	return a, err
 }
 
 func toStr(x []byte) string {
@@ -142,28 +138,28 @@ function parseFilterNil(lines:Any):Array<Any> {
 }
 
 function parseReturnTextSectionLine(c:Current, text:String) {
-	return retWrap({
+	return {
 		pos: [c.pos.line, c.pos.col, c.pos.offset],
 		type: "", // 作为最常见种类，故意置空，节省空间
 		text: text,
-	}, nil);
+	};
 }
 
 function parseReturnInvokeSectionLine(c:Current, name:String, params:Array<String>) {
-	return retWrap({
+	return {
 		pos: [c.pos.line, c.pos.col, c.pos.offset],
 		type: "invoke",
 		name: name,
 		params: params,
-	}, nil);
+	};
 }
 
 function parseReturnCodeSectionLine(c:Current, typeName:String, code:String) {
-	return retWrap({
+	return {
 		pos: [c.pos.line, c.pos.col, c.pos.offset],
 		type: typeName,
 		code: code,
-	}, nil);
+	};
 }
 
 function gatherParams(first:Any, v:Any):Array<String> {
@@ -177,7 +173,6 @@ function gatherParams(first:Any, v:Any):Array<String> {
 	return items;
 }
 
-var retWrap = (a:Any, err:Exception) -> {val: a, err: err};
 var toStr = (x:String) -> x;
 var toStrWithTrim = (x:String) -> StringTools.trim(x);
 var nil = null;
@@ -186,105 +181,108 @@ var nil = null;
 
 // ENTRY POINT
 input <- sp x:nodes !. {
-    return retWrap(x, nil);
+    return x;
 }
 
 nodes <- nodes:(node*) {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
     var items []*StorySection
 	if x, ok := nodes.([]any); ok {
 		for _, i := range x {
 		    items = append(items, i.(*StorySection))
 		}
 	}
-    return retWrap(&Story{Items: items}, nil);
+    return &Story{Items: items};
 {{ else }}
-    return retWrap(new Types.Story(nodes), nil);
+    return new Types.Story(nodes);
 {{ end }}
 }
 
-_nodeCond <- '[' cond:CodeExpr2? ']' { return retWrap(cond, nil); }
-_nodeNext <- '[' name:identifier ']' { return retWrap(name, nil); }
+_nodeCond <- '[' cond:CodeExpr2? ']' { return cond; }
+_nodeNext <- '[' name:identifier ']' { return name; }
 
 node <- nodeType1 / nodeType2
 
 nodeType1 <- ':' spNoCR name:identifier? spNoCR (cond:_nodeCond spNoCR next:_nodeNext?) spNoCR cr2 lines:nodeLines {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
     nameStr, _ := name.(string)
     condStr, _ := cond.(string)
     nextStr, _ := next.(string)
     items := parseFilterNil(lines, StorySectionLine{})
 
     if err := c.data.setSectionIndex(nameStr); err != nil {
-        return nil, err
+        p.addErr(err)
+        return nil
     }
-    return retWrap(&StorySection{
+    return &StorySection{
         Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
         Name: nameStr,
         Lines: items,
         Condition: condStr,
         Next: nextStr,
         NextIndex: c.data.getNextIndex(),
-    }, nil);
+    };
 {{ else }}
     var e = c.data.setSectionIndex(name);
     if (e != null) {
-        return retWrap(null, e);
+        p.addErr(e);
+        return null;
     }
 
-    return retWrap({
+    return {
         pos:[c.pos.line, c.pos.col, c.pos.offset],
         name:name,
         lines:parseFilterNil(lines),
         condition:cond,
         next:next,
         nextIndex: c.data.getNextIndex(),
-    }, nil);
+    };
 {{ end }}
 }
 
 nodeType2 <- ':' spNoCR name:identifier? spNoCR cr2 lines:nodeLines {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
     nameStr, _ := name.(string)
     items := parseFilterNil(lines, StorySectionLine{})
 
     if err := c.data.setSectionIndex(nameStr); err != nil {
-        return nil, err
+        p.addErr(err)
+        return nil
     }
-    return retWrap(&StorySection{
+    return &StorySection{
         Pos: []int{c.pos.line, c.pos.col, c.pos.offset},
         Name: nameStr,
         Lines: items,
         NextIndex: c.data.getNextIndex(),
-    }, nil);
+    };
 {{ else }}
     var e = c.data.setSectionIndex(name);
     if (e != null) {
-        return retWrap(null, e);
+        p.addErr(e);
+        return null;
     }
-
-    return retWrap({
+    return {
         pos:[c.pos.line, c.pos.col, c.pos.offset],
         name:name,
         lines:parseFilterNil(lines),
         nextIndex: c.data.getNextIndex(),
-    }, nil);
+    };
 {{ end }}
 }
 
-nodeLines <- lines:nodeLine* sp { return retWrap(lines, nil); }
+nodeLines <- lines:nodeLine* sp { return lines; }
 
 nodeLine <- nodeLineTypeComment / nodeLineType2 / nodeLineCommonText
 
-nodeLineTypeComment <- '@' '#' (!cr .)+ cr sp { return retWrap(nil, nil); }
+nodeLineTypeComment <- '@' '#' (!cr .)+ cr sp
 
-_curLine <- (!cr .)+ { return retWrap(toStr(c.text), nil); }
+_curLine <- (!cr .)+ { return toStr(c.text); }
 nodeLineType1x <- '@' !'{' expr:_curLine cr2 {
-    return parseReturnCodeSectionLine(c, "@", expr.(string));
+    // return parseReturnCodeSectionLine(c, "@", expr.(string));
 }
 
 nodeLineType1 <- '@' name:identifier params:funcInvoke sp {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
     return parseReturnInvokeSectionLine(c, name.(string), params.([]string))
 {{ else }}
     return parseReturnInvokeSectionLine(c, name, params);
@@ -292,20 +290,20 @@ nodeLineType1 <- '@' name:identifier params:funcInvoke sp {
 }
 
 
-// _storyNodeCodeBlock <- ( ( !"}!" . )* ) { return retWrap(toStrWithTrim(c.text), nil); }
+// _storyNodeCodeBlock <- ( ( !"}!" . )* ) { return toStrWithTrim(c.text); }
 
 nodeLineType2 <- "@{" code:Code ("}!" / "}") spNoCR cr2 {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
     return parseReturnCodeSectionLine(c, "codeBlock", code.(string));
 {{ else }}
     return parseReturnCodeSectionLine(c, "codeBlock", code);
 {{ end }}
 }
 
-_nltEscape <- "\\{" { return retWrap("{", nil); }
-_nltChar <- [^\r\n{] { return retWrap(toStr(c.text), nil); }
+_nltEscape <- "\\{" { return "{"; }
+_nltChar <- [^\r\n{] { return toStr(c.text); }
 nodeLineText <- items:((_nltEscape / _nltChar)+) {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
     var items2 []string
     for _, i := range items.([]any) {
         items2 = append(items2, i.(string));
@@ -326,7 +324,7 @@ nodeLineText <- items:((_nltEscape / _nltChar)+) {
 }
 
 nodeLineExprBlock <- '{' expr:CodeExpr '}' {
-{{ if eq .target "go" }}
+{{ if eq .Target "go" }}
     return parseReturnCodeSectionLine(c, "codeInText", expr.(string));
 {{ else }}
     return parseReturnCodeSectionLine(c, "codeInText", expr);
@@ -335,36 +333,39 @@ nodeLineExprBlock <- '{' expr:CodeExpr '}' {
 
 // Line not starts with [:@], normal text and {expr} are available.
 nodeLineCommonText <- ![:@] items:(( nodeLineText / nodeLineExprBlock )*) cr2 {
-{{ if eq .target "go" }}
-    v, _ := parseReturnTextSectionLine(c, "\n");
-    items2 := items.([]any)
+{{ if eq .Target "go" }}
+    v := parseReturnTextSectionLine(c, "\n");
+    items2, ok := items.([]any)
+    if !ok {
+        items2 = []any{}
+    }
     items2 = append(items2, v);
-    return retWrap(items2, nil);
+    return items2;
 {{ else }}
 	var x = parseReturnTextSectionLine(c, "\n");
 	var items2:Array<Any> = null;
 	if (Std.isOfType(items, Array)) {
 		items2 = cast items;
-		items2.push(x.val);
+		items2.push(x);
 	}
-	return retWrap(items2, nil);
+	return items2;
 {{ end }}
 }
 
-funcInvoke <- '(' sp ')' { {{ if eq .target "go" }} return retWrap([]string{}, nil) {{ else }} return retWrap([], nil); {{ end }} }
-            / '(' sp first:_codeExpr rest:(funcInvokeParamExtend*) ')' { return retWrap(gatherParams(first, rest), nil); }
+funcInvoke <- '(' sp ')' { {{ if eq .Target "go" }} return []string{} {{ else }} return []; {{ end }} }
+            / '(' sp first:_codeExpr rest:(funcInvokeParamExtend*) ')' { return gatherParams(first, rest); }
 
-funcInvokeParamExtend <- sp ',' sp e:_codeExpr { return retWrap(e, nil); }
+funcInvokeParamExtend <- sp ',' sp e:_codeExpr { return e; }
 
-// codeExpr <- [^\n,)]+ { return retWrap(toStr(c.text), nil); }
-_codeExpr <- _codeExpr2 { return retWrap(toStr(c.text), nil); }
+// codeExpr <- [^\n,)]+ { return toStr(c.text); }
+_codeExpr <- _codeExpr2 { return toStr(c.text); }
 
 _codeExpr2 <- identifier
            / integer
            / [0-9]* '.' [0-9]+
            / stringType
 
-stringType <- (codeString / '`' [^`]* '`') { return retWrap(toStr(c.text), nil); }
+stringType <- (codeString / '`' [^`]* '`') { return toStr(c.text); }
 
 codeString ← '"' ( !EscapedChar . / '\\' EscapeSequence )* '"'
            / '\'' ( !EscapedChar2 . / '\\' EscapeSequence2 )* '\''
@@ -374,8 +375,8 @@ EscapeSequence2 ← SingleCharEscape2 / UnicodeEscape
 SingleCharEscape2 ← ['\\/bfnrt]
 
 String ← '"' ( !EscapedChar . / '\\' EscapeSequence )* '"' {
-    c.text = bytes.Replace(c.text, []byte(`\/`), []byte(`/`), -1)
-    return strconv.Unquote(string(c.text))
+    // c.text = bytes.Replace(c.text, []byte(`\/`), []byte(`/`), -1)
+    // return strconv.Unquote(string(c.text))
 }
 EscapedChar ← [\x00-\x1f"\\]
 EscapeSequence ← SingleCharEscape / UnicodeEscape
@@ -386,15 +387,16 @@ NonZeroDecimalDigit ← [1-9]
 HexDigit ← [0-9a-f]i
 
 integer <- '-'? [0-9]+ {
-{{ if eq .target "go" }}
-    return strconv.Atoi(string(c.text));
+{{ if eq .Target "go" }}
+    val, _ := strconv.Atoi(string(c.text));
+    return val;
 {{ else }}
-    return retWrap(Std.parseInt(c.text), nil);
+    return Std.parseInt(c.text);
 {{ end }}
 }
 
 identifier <- xidStart xidContinue* {
-    return retWrap(toStr(c.text), nil);
+    return toStr(c.text);
 }
 
 // L + Other_ID_Start
@@ -422,6 +424,6 @@ CodeStringLiteral <- '"' (`\"` / `\\` / [^"\r\n])* '"' /
                     '\'' (`\'` / `\\` / [^']+)* '\''
 
 
-Code <- ( ( Comment / CodeStringLiteral / ![{}] SourceChar )+ / '{' Code '}' )* { return retWrap(toStr(c.text), nil); }
-CodeExpr <- ( (CodeStringLiteral / ![{}] SourceChar)+ / '{' CodeExpr '}' )* { return retWrap(toStr(c.text), nil); }
-CodeExpr2 <- ( (CodeStringLiteral / ![[\]] SourceChar)+ / '[' CodeExpr2 ']' )* { return retWrap(toStr(c.text), nil); }
+Code <- ( ( Comment / CodeStringLiteral / ![{}] SourceChar )+ / '{' Code '}' )* { return toStr(c.text); }
+CodeExpr <- ( (CodeStringLiteral / ![{}] SourceChar)+ / '{' CodeExpr '}' )* { return toStr(c.text); }
+CodeExpr2 <- ( (CodeStringLiteral / ![[\]] SourceChar)+ / '[' CodeExpr2 ']' )* { return toStr(c.text); }
