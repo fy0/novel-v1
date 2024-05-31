@@ -32,205 +32,235 @@ const extName = 'storybook-001'
 const msgStart = '故事书，启动'
 const msgEnd = '故事书，关闭'
 
-let storybookOn = false;
-
 /*
  TODO: 
   * 进度储存
-  * 多群共用支持
+  √ 多群共用支持
   * 个人进度模式 / 群共用进度模式
 */
 
 let ext = seal.ext.find(extName)
 if (!ext) {
-  ext = seal.ext.new(extName, '木落', '1.0.0');
-  seal.ext.register(ext);
-  let story = {};
-  let nsEval = null;
+    ext = seal.ext.new(extName, '木落', '1.0.0');
+    seal.ext.register(ext);
 
-  // 发送消息的函数，等收到消息时将其赋值
-  let doPrint = (text) => {
-    ;
-  }
-
-  // 接收到消息时，挨个调用里面所有的函数，并将其清空
-  const replyListener = [];
-
-  // 处理接收消息
-  ext.onNotCommandReceived = (ctx, msg) => {
-    doPrint = (text) => {
-      seal.replyToSender(ctx, msg, text);
+    // 占位
+    let createScope = (uid) => { };
+    // 发送消息的函数，等收到消息时将其赋值
+    let doPrint = (text) => {
+        ;
     }
 
-    // 处理开关
-    if ((!storybookOn) && msg.message === msgStart) {
-      storybookOn = true;
-      console.log('故事书插件触发');
-      doPrint('故事书插件触发，输入 "' + msgEnd + '" 可强制中止当前剧本。\\n这是一种特殊插件，由剧情脚本工具自动生成。')
-      nsEval(story);
-      return;
-    }
-    if (!storybookOn) return;
-    if (msg.message === msgEnd) {
-      storybookOn = false;
-      return;
+    let uid2scope = new Map();
+    let createScopeX = (uid) => {
+        let ret = uid2scope.get(uid);
+        if (ret) return ret;
+        const scope = createScope(uid);
+        uid2scope.set(uid, scope);
+        return scope;
     }
 
-    // 处理剧情部分，仅在被at时起效
-    // console.log('debug', msg.amIBeMentioned, ctx.isPrivate)
-    if (msg.amIBeMentioned || ctx.isPrivate) {
-      for (let i of replyListener) i(msg.message);
-      replyListener.length = 0;
-    }
-  }
+    // 接收到消息时，挨个调用里面所有的函数，并将其清空
+    const replyListener = [];
 
-  class Printer {
-    constructor() {
-      this.buf = [];
-    }
-
-    print(s) {
-      // 由于QQ等平台的特殊性，这里print并不直接对应发送消息
-      // 不然的话发的太多，所以存起来等flush时候统一发送
-      this.buf.push(s);
-    }
-
-    printFlush() {
-      const text = this.buf.join('');
-      this.buf.length = 0;
-      if (text) {
-        doPrint(text);
-      }
-    }
-
-    async doSelect(choices) {
-      for (let i = 0; i < choices.length; i++) {
-        this.print('> [' + (i + 1) + ']' + choices[i] + '\\n');
-      }
-
-      let choice = 0;
-      while (true) {
-        this.print("输入选项序号:");
-        this.printFlush();
-        const waitInput = new Promise(resolve => {
-          replyListener.push(resolve); // resolve时自动pop
-        });
-        // 等待拿到序号
-        choice = parseInt(await waitInput);
-        if (choice > 0 && choice <= choices.length) {
-          break;
+    // 处理接收消息
+    ext.onNotCommandReceived = (ctx, msg) => {
+        doPrint = (text) => {
+            seal.replyToSender(ctx, msg, text);
         }
-      }
-      return choice;
-    }
-  }
 
-  const p = new Printer();
+        let uid = '';
+        if (ctx.isPrivate) uid = msg.sender.userId;
+        else uid = msg.groupId;
 
-  let createScope = function () {
-    let scope = {};
-    let vars = {};
-    scope.vars = {
-      select: async (...args) => {
-        let choices = [];
-        for (let i of args) {
-          choices.push(i);
-        }
-        let choice = await p.doSelect(choices);
-        vars.val = choice;
-        return choice;
-      },
-      data: {},
-    };
-    scope.vars.vars = scope.vars;
-    vars = scope.vars;
-    scope.evalBlock = function (code) {
-      // return new Function('with(this) {' + code + '}').call(scope.vars);
-      return new Function('return (async () => { with(this) {' + code + '} })()').call(scope.vars);
-    };
-    scope.evalExpr = function (code) {
-      return new Function('with(this) { return(' + code + ') }').call(scope.vars);
-    };
-    return scope;
-  };
+        const storybookOn = Boolean(uid2scope.get(uid));
 
-  const scope = createScope();
-  nsEval = async function (s) {
-    // 这个函数看着比较乱，因为是编译出来的，不过不需要太管
-    // 源码在: https://github.com/fy0/novel-v1/blob/v2/hx/Eval.hx
-    const _gthis = {
-      curLine: 0,
-      textCallback: async (sl, text) => {
-        // console.log('text', [text]);
-        await p.print(text);
-      },
-      codeCallback: async (sl, code, returnAs) => {
-        switch (returnAs) {
-          case 'string': {
-            const r = scope.evalExpr(code);
-            return String(r);
-          }
-          case 'bool': {
-            const r = scope.evalExpr(code);
-            return Boolean(r);
-          }
-        }
-        const r = scope.evalBlock(code);
-        return r;
-      },
-    }
-
-    const Bool = null;
-    const js_Boot = { __cast: (val) => val };
-
-    let curIndex = 0;
-    while (!(curIndex < 0 || curIndex >= s.items.length)) {
-      let i = s.items[curIndex];
-      _gthis.curLine = i.pos[0];
-      // console.log('section {i.name}');
-
-      if (i.condition != null && i.condition != "") {
-        if (_gthis.codeCallback != null) {
-          let valid = (await _gthis.codeCallback(_gthis, i.condition, "bool"));
-          if (!js_Boot.__cast(valid, Bool)) {
-            ++curIndex;
-            continue;
-          }
-        }
-      }
-      let _g = 0;
-      let _g1 = i.lines;
-      while (_g < _g1.length) {
-        let line = _g1[_g];
-        // console.log('line {_g}: {JSON.stringify(line)}');
-        ++_g;
-        switch (line.type) {
-          case "":
-            (await _gthis.textCallback(_gthis, line.text));
-            break;
-          case "codeBlock": case "codeInText":
-            let returnAs = "any";
-            if (line.type == "codeInText") {
-              returnAs = "string";
+        // 处理开关
+        if (msg.message === msgStart) {
+            // 如果已经开了，那么不操作
+            if (storybookOn) {
+                return;
             }
-            let ret = (await _gthis.codeCallback(_gthis, line.code, returnAs));
-            if (line.type == "codeInText") {
-              (await _gthis.textCallback(_gthis, "" + ret));
-            }
-            break;
+
+            console.log('故事书插件触发');
+            const currentUser = '当前用户: ' + uid;
+            doPrint('故事书插件触发，输入 "' + msgEnd + '" 可强制中止当前剧本。\\n这是一种特殊插件，由剧情脚本工具自动生成。\\n如果你在群内，做出选择时需要@骰子\\n' + currentUser)
+
+            const scope = createScopeX(uid);
+            scope.nsEval(scope.story);
+            return;
         }
-      }
-      // console.log('xxxx {curIndex} i.nextIndex')
-      curIndex = i.nextIndex;
+
+        if (!storybookOn) return;
+        if (msg.message === msgEnd) {
+            uid2scope.delete(uid);
+            return;
+        }
+
+        // 处理剧情部分，仅在被at时起效
+        // console.log('debug', msg.amIBeMentioned, ctx.isPrivate)
+        if (msg.amIBeMentioned || ctx.isPrivate) {
+            let rest = [];
+
+            for (let i of replyListener) {
+                if (i.uid === uid) {
+                    i.resolve(msg.message);
+                } else {
+                    rest.push(i);
+                }
+            };
+            replyListener.length = 0;
+            replyListener.push(...rest);
+        }
     }
-    p.printFlush();
-    return 0;
-  }
 
-  // 剧本代码
-  story = '<%STORY-BLOCK%>'
+    class Printer {
+        constructor(uid) {
+            this.uid = uid;
+            this.buf = [];
+        }
 
-}`,
+        print(s) {
+            // 由于QQ等平台的特殊性，这里print并不直接对应发送消息
+            // 不然的话发的太多，所以存起来等flush时候统一发送
+            this.buf.push(s);
+        }
+
+        printFlush() {
+            const text = this.buf.join('');
+            this.buf.length = 0;
+            if (text) {
+                doPrint(text);
+            }
+        }
+
+        async doSelect(choices) {
+            for (let i = 0; i < choices.length; i++) {
+                this.print('> [' + (i + 1) + ']' + choices[i] + '\\n');
+            }
+
+            let choice = 0;
+            while (true) {
+                this.print("输入选项序号:");
+                this.printFlush();
+
+                const waitInput = new Promise(resolve => {
+                    replyListener.push({ uid: this.uid, resolve }); // resolve时自动pop
+                });
+                // 等待拿到序号
+                choice = parseInt(await waitInput);
+                if (choice > 0 && choice <= choices.length) {
+                    break;
+                }
+            }
+            return choice;
+        }
+    }
+
+    createScope = function (uid) {
+        const p = new Printer(uid);
+        let scope = {};
+        let vars = {};
+        scope.vars = {
+            select: async (...args) => {
+                let choices = [];
+                for (let i of args) {
+                    choices.push(i);
+                }
+                let choice = await p.doSelect(choices);
+                vars.val = choice;
+                return choice;
+            },
+            data: {},
+        };
+        scope.vars.vars = scope.vars;
+        vars = scope.vars;
+        scope.evalBlock = function (code) {
+            // return new Function('with(this) {' + code + '}').call(scope.vars);
+            return new Function('return (async () => { with(this) {' + code + '} })()').call(scope.vars);
+        };
+        scope.evalExpr = function (code) {
+            return new Function('with(this) { return(' + code + ') }').call(scope.vars);
+        };
+
+        scope.nsEval = async function (s) {
+            // 这个函数看着比较乱，因为是编译出来的，不过不需要太管
+            // 源码在: https://github.com/fy0/novel-v1/blob/v2/hx/Eval.hx
+            const _gthis = {
+                curLine: 0,
+                textCallback: async (sl, text) => {
+                    // console.log('text', [text]);
+                    await p.print(text);
+                },
+                codeCallback: async (sl, code, returnAs) => {
+                    switch (returnAs) {
+                        case 'string': {
+                            const r = scope.evalExpr(code);
+                            return String(r);
+                        }
+                        case 'bool': {
+                            const r = scope.evalExpr(code);
+                            return Boolean(r);
+                        }
+                    }
+                    const r = scope.evalBlock(code);
+                    return r;
+                },
+            }
+
+            const Bool = null;
+            const js_Boot = { __cast: (val) => val };
+
+            let curIndex = 0;
+            while (!(curIndex < 0 || curIndex >= s.items.length)) {
+                let i = s.items[curIndex];
+                // _gthis.curLine = i.pos[0];
+                // console.log('section {i.name}');
+
+                if (i.condition != null && i.condition != "") {
+                    if (_gthis.codeCallback != null) {
+                        let valid = (await _gthis.codeCallback(_gthis, i.condition, "bool"));
+                        if (!js_Boot.__cast(valid, Bool)) {
+                            ++curIndex;
+                            continue;
+                        }
+                    }
+                }
+                let _g = 0;
+                let _g1 = i.lines;
+                while (_g < _g1.length) {
+                    let line = _g1[_g];
+                    // console.log('line {_g}: {JSON.stringify(line)}');
+                    ++_g;
+                    switch (line.type) {
+                        case "":
+                            (await _gthis.textCallback(_gthis, line.text));
+                            break;
+                        case "codeBlock": case "codeInText":
+                            let returnAs = "any";
+                            if (line.type == "codeInText") {
+                                returnAs = "string";
+                            }
+                            let ret = (await _gthis.codeCallback(_gthis, line.code, returnAs));
+                            if (line.type == "codeInText") {
+                                (await _gthis.textCallback(_gthis, "" + ret));
+                            }
+                            break;
+                    }
+                }
+                // console.log('xxxx {curIndex} i.nextIndex')
+                curIndex = i.nextIndex;
+            }
+            p.printFlush();
+            return 0;
+        }
+
+        // 剧本代码
+        scope.story = '<%STORY-BLOCK%>';
+        return scope;
+    };
+}
+`,
       code: ''
     }
   </script>
@@ -429,6 +459,7 @@ if (!ext) {
 
     const sl = newLoader();
     let s = sl.parse(defaultScript.join('\n'));
+    // let s = sl.parse(':测试' + '\nvar a');
     console.log(s);
     dataExport.story = s;
     sl.eval(s);
@@ -450,12 +481,32 @@ if (!ext) {
       alert('注意，此处导出的是最后一次执行的代码，可以在sealdice中作为js插件加载。\n代码中的msgStart和msgEnd分别为开始和结束的提示词，用户@骰子发这两个就能开始剧情\n记得同时修改作者信息！\n可能不会第一时间显示，需要点两下显隐')
       function replacer(key, value) {
         if (key === 'pos' && Array.isArray(value)) {
-          return '';
+          return null;
         }
+        // if (key === 'code') {
+        //   if (value.trim() == '') {
+        //     return null;
+        //   }
+        //   return `❄️${value}☃️`;
+        // }
+        // if (key === 'condition') {
+        //   if (value.trim() == '') {
+        //     return null;
+        //   }
+        //   return `❄️${value}☃️`;
+        // }
         return value;
       }
-      const str = JSON.stringify(s, replacer, 2);
+      let str = JSON.stringify(s, replacer, 2);
       // console.log(str);
+
+      // 不太好用，除非是禁止eval的场景
+      // 通过eval的好处是可以通过with制作伪命名空间
+      // const convert = (x) => JSON.parse('"' + x + '"' );
+      // str = str.replace(/("type": "codeBlock",.+?)"❄️(.+?)☃️"/sg, (_, ...args) => `${args[0]}async () => { ${convert(args[1])} }`); // '$1async () => { $2 }'
+      // str = str.replace(/("type": "codeInText",.+?)"❄️(.+?)☃️"/sg, (_, ...args) => `${args[0]}async () => ${convert(args[1])}`); // '$1async () => $2 '
+      // str = str.replace(/("condition": )"❄️(.+?)☃️"/sg, (_, ...args) => `${args[0]}async () => ${convert(args[1])}`);
+
       dataExport.code = dataExport.template.replace("'<%STORY-BLOCK%>'", str);
       dataExportOpen = true;
       return s;

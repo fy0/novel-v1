@@ -3,6 +3,8 @@ import Eval.StoryLoader;
 import Macro;
 
 function main() {
+	makeESM();
+	
 	#if !js
 	demo();
 	#end
